@@ -21,6 +21,8 @@ final class BiblePickerViewModel: Identifiable {
     private(set) var selectedChapter: Int?
     private(set) var verseCount = 0
     private(set) var isLoading = false
+    /// The text must be on the iPad before anything can be picked.
+    private(set) var availability: BibleAvailability = .ready
 
     private let repository: any BibleRepository
     private let onSelect: (BibleBook, Int, Int) -> Void
@@ -65,9 +67,37 @@ final class BiblePickerViewModel: Identifiable {
 
     // MARK: Intents
 
+    /// "Descargando la Biblia… 40 %".
+    var downloadText: String {
+        guard case let .downloading(progress) = availability else { return "" }
+        let percent = progress.formatted(.percent.precision(.fractionLength(0)).locale(Locale(identifier: "es")))
+        return String(localized: "Descargando la Biblia… \(percent)")
+    }
+
+    /// Follows the download and loads the books once the text is here, until the calling task is cancelled.
     func load() async {
-        guard books.isEmpty else { return }
-        books = (try? await repository.books()) ?? []
+        var askedForDownload = false
+        for await availability in repository.availabilityUpdates() {
+            self.availability = availability
+            // Opened before the background download finished: make sure one is running.
+            if !askedForDownload, availability == .needsConnection {
+                askedForDownload = true
+                retryDownload()
+            }
+            if availability == .ready, books.isEmpty {
+                books = (try? await repository.books()) ?? []
+            }
+        }
+    }
+
+    func retryDownload() {
+        availability = .downloading(progress: 0)
+        Task { await repository.prepare() }
+    }
+
+    /// Installs a state directly. Used by previews.
+    func apply(availability: BibleAvailability) {
+        self.availability = availability
     }
 
     func selectBook(_ book: BibleBook) {

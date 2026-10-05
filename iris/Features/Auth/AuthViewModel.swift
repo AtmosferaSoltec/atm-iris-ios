@@ -46,6 +46,8 @@ final class AuthViewModel {
 
     private(set) var fieldErrors: [Field: String] = [:]
     private(set) var bannerMessage: String?
+    /// Errors are red; notices such as "Tu contraseña quedó actualizada" are green.
+    private(set) var bannerStyle: IrisBanner.Style = .error
     private(set) var isSubmitting = false
     /// Field the view should focus after a failed validation.
     private(set) var focusRequest: Field?
@@ -123,7 +125,7 @@ final class AuthViewModel {
                 session = try await authService.signUp(
                     SignUpRequest(
                         churchName: trimmed(churchName),
-                        leaderName: trimmed(leaderName),
+                        fullName: trimmed(leaderName),
                         email: trimmed(signUpEmail),
                         password: signUpPassword
                     )
@@ -133,13 +135,21 @@ final class AuthViewModel {
             signUpPassword = ""
             onAuthenticated(session)
         } catch {
-            bannerMessage = (error as? LocalizedError)?.errorDescription
-                ?? String(localized: "Algo salió mal. Inténtalo de nuevo.")
+            show(AuthError(error))
         }
     }
 
     func presentPasswordRecovery() {
-        recoveryViewModel = PasswordRecoveryViewModel(email: trimmed(signInEmail), authService: authService)
+        recoveryViewModel = PasswordRecoveryViewModel(email: trimmed(signInEmail), authService: authService) { [weak self] in
+            self?.showNotice(String(localized: "Tu contraseña quedó actualizada. Inicia sesión con la nueva."), style: .success)
+        }
+    }
+
+    /// Explains why the app came back to the sign-in screen.
+    func presentSignOut(reason: SignOutReason) {
+        guard reason == .expired else { return }
+        mode = .signIn
+        showNotice(String(localized: "Tu sesión expiró. Vuelve a iniciar sesión."), style: .error)
     }
 
     func focusRequestHandled() {
@@ -163,9 +173,8 @@ final class AuthViewModel {
 
         switch mode {
         case .signIn:
-            // Mockup phase: sign-in is open so the rest of the app can be reviewed.
-            // Restore email/password validation when the real API is connected.
-            break
+            errors[.signInEmail] = validator.emailError(for: signInEmail)
+            errors[.signInPassword] = validator.passwordError(for: signInPassword, requiresStrength: false)
         case .signUp:
             errors[.churchName] = validator.requiredError(
                 for: churchName, message: String(localized: "Escribe el nombre de tu iglesia.")
@@ -187,6 +196,36 @@ final class AuthViewModel {
         case .signIn: [.signInEmail, .signInPassword]
         case .signUp: [.churchName, .leaderName, .signUpEmail, .signUpPassword]
         }
+    }
+
+    /// API field errors go under their field; anything else goes to the banner.
+    private func show(_ error: AuthError) {
+        var errors: [Field: String] = [:]
+        for (key, message) in error.fieldErrors {
+            if let field = field(forAPIKey: key) { errors[field] = message }
+        }
+        fieldErrors = errors
+        focusRequest = fieldOrder.first { errors[$0] != nil }
+        if errors.isEmpty {
+            showNotice(error.errorDescription ?? String(localized: "Algo salió mal. Inténtalo de nuevo."), style: .error)
+        }
+    }
+
+    private func field(forAPIKey key: String) -> Field? {
+        switch (mode, key) {
+        case (.signIn, "email"): .signInEmail
+        case (.signIn, "password"): .signInPassword
+        case (.signUp, "churchName"): .churchName
+        case (.signUp, "fullName"): .leaderName
+        case (.signUp, "email"): .signUpEmail
+        case (.signUp, "password"): .signUpPassword
+        default: nil
+        }
+    }
+
+    private func showNotice(_ message: String, style: IrisBanner.Style) {
+        bannerStyle = style
+        bannerMessage = message
     }
 
     private func clearFeedback(for field: Field) {

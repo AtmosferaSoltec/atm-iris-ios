@@ -42,6 +42,8 @@ final class ServiceTypeEditorViewModel: Identifiable {
     let isNew: Bool
     /// Time control is a church module; when it is off the blocks are hidden, never dropped.
     let showsTimeControl: Bool
+    /// Roles without `serviceTypes.manage` can look but not change.
+    let isReadOnly: Bool
 
     private let original: ServiceType?
     private let otherNames: Set<String>
@@ -53,10 +55,12 @@ final class ServiceTypeEditorViewModel: Identifiable {
         editing original: ServiceType?,
         otherTypes: [ServiceType],
         showsTimeControl: Bool,
+        isReadOnly: Bool = false,
         serviceTypes: any ServiceTypeRepository,
         people: any PeopleRepository,
         onFinish: @escaping (Outcome) -> Void
     ) {
+        self.isReadOnly = isReadOnly
         self.original = original
         isNew = original == nil
         self.showsTimeControl = showsTimeControl

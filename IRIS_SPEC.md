@@ -4,7 +4,22 @@
 > Contiene todo lo construido hasta ahora: concepto, tokens de diseño, componentes, pantallas, comportamiento, arquitectura, datos de prueba y textos visibles.
 > Todo lo que se ve en pantalla está en **español**; el código va en **inglés**.
 >
-> **Estado: maqueta funcional.** Todas las pantallas y reglas funcionan, pero **nada está conectado a un servidor**: el login acepta cualquier correo, los datos salen de mocks en memoria (§10–11) y se pierden al cerrar el app, la música y el video se simulan, y no hay salida real al TV. Hay que replicar exactamente eso (mismas interfaces y mocks) para que luego baste con cambiar los mocks por implementaciones reales.
+> **Estado: conectado a la API** (iPad). Las pantallas y reglas de este documento no cambian; lo que antes simulaban los
+> mocks ahora es real. Cambios de comportamiento:
+> - **Sesión permanente**: se inicia sesión una vez por iPad. Los tokens se renuevan solos; si el servidor rechaza la
+>   sesión, la app vuelve al acceso con "Tu sesión expiró. Vuelve a iniciar sesión." "Entrar" valida correo y contraseña.
+> - **Sin conexión**: el iPad trabaja sobre una copia local de la iglesia que se pone al día con el servidor (al abrir, al
+>   volver al Inicio, cada 5 min en el Inicio, al recuperar la conexión y con "Actualizar ahora"), nunca durante un
+>   servicio. Lo que se escribe sin red se guarda en una cola y se envía al volver. Indicador en la barra superior
+>   ("Actualizado hace 2 min", "Sin conexión · 3 cambios pendientes"). La primera vez se ve "Preparando tu iglesia…".
+> - **Recuperación por código**: tres pasos (correo → código de 6 dígitos → nueva contraseña) en lugar de un enlace.
+> - **Permisos por rol** (dueño, administrador, operador): sin permiso la acción no aparece (Módulos y el editor de
+>   servicios quedan de solo lectura; Tiempos sin ajustes; la consola sin "Guardar en la plantilla"). Menú de la cuenta
+>   con cambio de iglesia y cierre de sesión en todos los dispositivos; el equipo se administra en la web.
+> - **Contenido real**: canciones y multimedia de la web (descargados para proyectar sin red), fondos con imágenes de la
+>   iglesia, Biblia RVR1909 completa sin conexión, pantalla externa real (HDMI/AirPlay) y reproducción real de audio y video.
+>
+> Los mocks (§10–11) siguen existiendo para vistas previas, pruebas y el argumento de arranque `-IrisDataMode mock`.
 >
 > **Recursos del logo**: se entregan aparte en la carpeta **`iris-logo-seleccionado`** (en Descargas). Copia al proyecto de Windows lo que necesites; el detalle de cada archivo está en §5.2.
 
@@ -330,7 +345,7 @@ Renderiza un `ProjectionFrame` en 16:9 a cualquier tamaño:
 6. Solo en crear cuenta: "Al crear tu cuenta aceptas los **Términos** y la **Política de privacidad**." (links, centrado, `caption`).
 
 **Validación** (en el ViewModel):
-- ⚠️ **Fase de maqueta: "Entrar" está libre** (no valida ni exige correo; si va vacío, el mock devuelve `pastor@vidanueva.org`). Restaurar validación al conectar el API.
+- "Entrar" exige correo válido y contraseña (validación restaurada al conectar la API).
 - Crear cuenta: requeridos → "Escribe el nombre de tu iglesia.", "Escribe el nombre del responsable."; correo → "Ingresa el correo de tu iglesia." / "Ese correo no parece válido."; contraseña → "Ingresa tu contraseña." / "Usa al menos 8 caracteres."
 - Al fallar la validación se enfoca el primer campo con error. Editar un campo borra su error y el banner.
 - Errores del servicio: "El correo o la contraseña no coinciden. Revísalos e inténtalo de nuevo." · "Ya existe una cuenta con ese correo. Intenta iniciar sesión." · "No pudimos conectarnos. Verifica tu conexión a internet." · genérico "Algo salió mal. Inténtalo de nuevo."

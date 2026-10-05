@@ -34,4 +34,11 @@ Fases 02 y 03.
 
 ## Desviaciones
 
-_(Completar al cerrar la fase.)_
+- Los repositorios comparten `LiveChurchData` (copia local + cola + aviso de cambios). Cada escritura: copia local →
+  cola → `sync.flushSoon()`.
+- `LiveModuleSettingsRepository.save` también actualiza `StoredChurch` localmente; si la copia aún no tiene la iglesia
+  (primera sincronización pendiente) solo encola el `PUT`.
+- `LivePeopleRepository.add` rechaza duplicados por *nameKey* con `LocalWriteError` (además de la validación del
+  ViewModel), y Personas muestra el mensaje del repositorio en vez del genérico.
+- Personas sigue contando bloques con los registros locales (no con `blockCount`), lo que da el mismo número sin conexión.
+- `LiveTimeRecordRepository` se hizo aquí junto a los demás; su comportamiento es el de la fase 08.

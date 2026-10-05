@@ -47,4 +47,22 @@ Entrega el reporte de `00-fundamentos/plataforma.md` §6 y pregunta al usuario s
 
 ## Desviaciones
 
-_(Completar al cerrar la fase.)_
+- **Integración**: la API local ya expone todos los endpoints que usa el iPad. Todos los payloads reales (`/church`,
+  `/people`, `/service-types`, `/songs`, `/sync/changes`, `/media`, `/bible/translations`, `/service-records`) se
+  decodifican con los DTO. `LiveAPIIntegrationTests` recorre contra la API real el login (y el error
+  `INVALID_CREDENTIALS`), la primera sincronización, una persona creada local → cola → API (una sola vez) y su
+  borrado, la descarga de la Biblia con Juan 3:16 y el cierre de sesión. Esas pruebas se saltan solas si la API no
+  responde en `localhost:3020`. Hacen 5 logins: con el límite de 5/min de `sign-in`, correr la suite dos veces
+  seguidas puede dar 429.
+- No se recorrieron a mano en el simulador la interfaz completa, la pantalla externa (*I/O › External Displays*),
+  el audio, el cambio de iglesia (la cuenta de desarrollo tiene una sola) ni el rol `operator` con su cuenta: quedan
+  para el revisor.
+- **Pruebas**: 114 casos en verde (Swift Testing). Las nuevas cubren contrato, `AuthSessionManager`, `SyncEngine`,
+  `Outbox`, repositorios live, zona horaria, permisos e integración. El servidor falso es un `URLProtocol` con un host
+  por prueba, así las pruebas pueden correr en paralelo.
+- **Limpieza**: `.live` ya no usa ningún mock. `MockServicePlanRepository` queda solo para las vistas previas de la
+  consola; en live, `EmptyServicePlanRepository` (el servicio empieza vacío). `MockShowcaseContentProvider` pasó a ser
+  `StaticShowcaseContentProvider` (textos fijos de la pantalla de acceso). No quedan `print` ni `TODO`.
+- Corrección encontrada por las pruebas: `JSONCoding.string(from:)` redondea al milisegundo (antes `.022` podía salir
+  como `.021`).
+- Las vistas previas compilan, pero no se renderizaron: no hubo herramienta `RenderPreview` en esta sesión.

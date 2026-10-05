@@ -60,7 +60,7 @@ struct AuthView: View {
                 )
 
                 if let message = viewModel.bannerMessage {
-                    IrisBanner(style: .error, message: message)
+                    IrisBanner(style: viewModel.bannerStyle, message: message)
                         .transition(.opacity.combined(with: .move(edge: .top)))
                 }
 
@@ -126,7 +126,7 @@ struct AuthView: View {
     AuthView(
         viewModel: AuthViewModel(
             authService: MockAuthService(),
-            showcaseProvider: MockShowcaseContentProvider(),
+            showcaseProvider: StaticShowcaseContentProvider(),
             onAuthenticated: { _ in }
         )
     )
@@ -136,7 +136,7 @@ struct AuthView: View {
 #Preview("Sign up", traits: .landscapeLeft) {
     let viewModel = AuthViewModel(
         authService: MockAuthService(),
-        showcaseProvider: MockShowcaseContentProvider(),
+        showcaseProvider: StaticShowcaseContentProvider(),
         onAuthenticated: { _ in }
     )
     viewModel.mode = .signUp

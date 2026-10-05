@@ -73,4 +73,18 @@ Repositorios Live ──lee──▶ LocalStore (SwiftData)  ◀──aplica pá
 
 ## Desviaciones
 
-_(Completar al cerrar la fase.)_
+- La copia usa **un solo** `@Model` genérico, `StoredEntity` (clase, id, iglesia, clave de orden y el JSON del DTO del
+  contrato), en lugar de un `@Model` por entidad. Bloques y secciones quedan embebidos en ese JSON. `SyncState` y
+  `OutboxOperation` sí son modelos propios. `LocalStore` devuelve DTO y los repositorios los convierten a `Core/Models`.
+- `SyncEngine` es una clase `@Observable` en el actor principal (no un `actor`): su estado alimenta la interfaz y el trabajo
+  pesado ocurre en los actores `APIClient` y `LocalStore`. `Outbox` y `ConnectivityMonitor` siguen el mismo criterio.
+- Si después de vaciar la cola quedan operaciones (sin red o error 5xx), **no** se piden páginas: así una edición local que
+  aún no llega al API no se pisa con la versión anterior del servidor.
+- "Sincronización completa de ese tipo" tras un rechazo 4xx: se vuelve a leer la lista del tipo (`GET /people`,
+  `/service-types`, `/service-records` paginado, `/church`) y se reemplazan esas filas en la copia.
+- La pausa durante el servicio la aplica `SignedInNavigator` al entrar y salir de la consola (`suspend()`/`resume()`).
+- Los protocolos de repositorio ganan `changes() -> AsyncStream<Void>` (los mocks no emiten nada); los ViewModels abiertos
+  recargan en silencio con `observeChanges()`.
+- Al expirar la sesión (refresh 401) la copia y la cola se conservan; si la siguiente sesión es de otra iglesia,
+  `LocalStore.prepare(for:)` las borra.
+- `/sync/changes` todavía no existe en la API: la verificación con datos reales queda para la fase 10.

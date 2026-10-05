@@ -46,6 +46,7 @@ struct AddToServiceView: View {
         .presentationSizing(.page)
         .presentationBackground(IrisColor.canvasElevated)
         .task { await viewModel.load() }
+        .task { await viewModel.observeChanges() }
     }
 
     // MARK: Header & footer
@@ -104,6 +105,13 @@ struct AddToServiceView: View {
             ProgressView()
                 .tint(IrisColor.textSecondary)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if viewModel.isLibraryEmpty {
+            ContentUnavailableView {
+                Label("Aún no hay canciones", systemImage: ServiceItem.Kind.song.systemImage)
+            } description: {
+                Text("Agrégalas desde la web de Iris.")
+            }
+            .foregroundStyle(IrisColor.textSecondary)
         } else if viewModel.isCurrentTabEmpty {
             ContentUnavailableView.search(text: viewModel.query)
                 .foregroundStyle(IrisColor.textSecondary)
@@ -127,6 +135,7 @@ struct AddToServiceView: View {
                         tint: ServiceItem.Kind.song.tint,
                         title: sheet.title,
                         subtitle: sheet.author,
+                        footnote: sheet.copyright,
                         preview: sheet.firstLine,
                         trailing: nil,
                         isSelected: viewModel.isSelected(.lyric(sheet.id))
@@ -146,6 +155,7 @@ struct AddToServiceView: View {
                         subtitle: asset.subtitle,
                         preview: nil,
                         trailing: asset.duration,
+                        downloadState: asset.downloadState,
                         isSelected: viewModel.isSelected(.media(asset.id))
                     ) {
                         viewModel.toggle(.media(asset.id))
@@ -180,8 +190,11 @@ struct LibraryRow: View {
     let tint: Color
     let title: String
     let subtitle: String
+    /// Copyright, under the author.
+    var footnote: String?
     let preview: String?
     let trailing: String?
+    var downloadState: MediaAsset.DownloadState = .ready
     let isSelected: Bool
     let action: () -> Void
 
@@ -203,6 +216,12 @@ struct LibraryRow: View {
                     Text(subtitle)
                         .font(IrisFont.caption)
                         .foregroundStyle(IrisColor.textTertiary)
+                    if let footnote {
+                        Text(footnote)
+                            .font(IrisFont.caption)
+                            .foregroundStyle(IrisColor.textTertiary)
+                            .lineLimit(1)
+                    }
                     if let preview {
                         Text(preview)
                             .font(.system(.callout, design: .serif))
@@ -214,13 +233,17 @@ struct LibraryRow: View {
 
                 Spacer(minLength: IrisSpacing.sm)
 
-                if let trailing {
-                    Text(trailing)
-                        .font(.system(.callout, design: .monospaced, weight: .medium))
-                        .foregroundStyle(IrisColor.textSecondary)
-                }
+                if downloadState != .ready {
+                    DownloadBadge(state: downloadState)
+                } else {
+                    if let trailing {
+                        Text(trailing)
+                            .font(.system(.callout, design: .monospaced, weight: .medium))
+                            .foregroundStyle(IrisColor.textSecondary)
+                    }
 
-                IrisCheckmark(isOn: isSelected)
+                    IrisCheckmark(isOn: isSelected)
+                }
             }
             .padding(IrisSpacing.md - 2)
             .background(isSelected ? IrisColor.surfaceRaised : IrisColor.surface, in: shape)
@@ -233,8 +256,38 @@ struct LibraryRow: View {
             .contentShape(shape)
         }
         .buttonStyle(.irisPressable)
+        .disabled(downloadState != .ready)
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+}
+
+/// "Descargando… 40 %", "Pendiente" or "No se pudo descargar" for a file not yet on the iPad.
+struct DownloadBadge: View {
+    let state: MediaAsset.DownloadState
+
+    var body: some View {
+        HStack(spacing: IrisSpacing.xs) {
+            switch state {
+            case let .downloading(progress):
+                ProgressView(value: progress)
+                    .progressViewStyle(.circular)
+                    .controlSize(.small)
+                    .tint(IrisColor.textSecondary)
+                Text("Descargando…")
+            case .notDownloaded:
+                Image(systemName: "icloud.and.arrow.down")
+                Text("Descargando…")
+            case .failed:
+                Image(systemName: "exclamationmark.icloud")
+                    .foregroundStyle(IrisColor.warning)
+                Text("No se pudo descargar")
+            case .ready:
+                EmptyView()
+            }
+        }
+        .font(IrisFont.caption)
+        .foregroundStyle(IrisColor.textSecondary)
     }
 }
 
@@ -253,8 +306,18 @@ struct LibraryMediaTile: View {
                     .aspectRatio(16 / 9, contentMode: .fit)
                     .clipShape(shape)
                     .overlay(alignment: .topTrailing) {
-                        IrisCheckmark(isOn: isSelected)
-                            .padding(IrisSpacing.xs)
+                        if asset.isAvailable {
+                            IrisCheckmark(isOn: isSelected)
+                                .padding(IrisSpacing.xs)
+                        }
+                    }
+                    .overlay {
+                        if !asset.isAvailable {
+                            DownloadBadge(state: asset.downloadState)
+                                .padding(.horizontal, IrisSpacing.sm)
+                                .padding(.vertical, IrisSpacing.xs)
+                                .background(.black.opacity(0.6), in: Capsule())
+                        }
                     }
                     .overlay(alignment: .bottomTrailing) {
                         if let duration = asset.duration {
@@ -287,6 +350,7 @@ struct LibraryMediaTile: View {
             }
         }
         .buttonStyle(.irisPressable)
+        .disabled(!asset.isAvailable)
         .accessibilityLabel(Text(asset.title))
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
@@ -297,6 +361,11 @@ struct LibraryMediaTile: View {
             startPoint: .topLeading,
             endPoint: .bottomTrailing
         )
+        .overlay {
+            if let url = asset.localURL {
+                MediaThumbnail(url: url, kind: asset.kind)
+            }
+        }
         .overlay {
             if asset.kind == .video {
                 Image(systemName: "play.fill")

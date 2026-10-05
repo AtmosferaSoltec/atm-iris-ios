@@ -10,17 +10,17 @@ struct LiveConsoleScreen: View {
     @State private var viewModel: LiveConsoleViewModel
     private let onExit: () -> Void
     private let onOpenTimes: () -> Void
-    private let onSignOut: () -> Void
+    private let account: AccountViewModel
 
     init(
-        session: UserSession,
+        session: SessionContext,
         serviceType: ServiceType?,
         modules: ChurchModules,
         people: [Person],
         dependencies: AppDependencies,
         onExit: @escaping () -> Void,
         onOpenTimes: @escaping () -> Void,
-        onSignOut: @escaping () -> Void
+        account: AccountViewModel
     ) {
         _viewModel = State(
             initialValue: LiveConsoleViewModel(
@@ -41,10 +41,10 @@ struct LiveConsoleScreen: View {
         )
         self.onExit = onExit
         self.onOpenTimes = onOpenTimes
-        self.onSignOut = onSignOut
+        self.account = account
     }
 
     var body: some View {
-        LiveConsoleView(viewModel: viewModel, onExit: onExit, onOpenTimes: onOpenTimes, onSignOut: onSignOut)
+        LiveConsoleView(viewModel: viewModel, onExit: onExit, onOpenTimes: onOpenTimes, account: account)
     }
 }

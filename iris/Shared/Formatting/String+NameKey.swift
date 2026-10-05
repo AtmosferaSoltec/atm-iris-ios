@@ -6,9 +6,12 @@
 import Foundation
 
 nonisolated extension String {
-    /// Trimmed, case- and accent-insensitive form used to compare names: " José " matches "jose".
+    /// Form used to compare names (API contract §2): trimmed, inner spaces collapsed to one,
+    /// without diacritics and lowercased. "  José   Pérez " → "jose perez".
     var nameKey: String {
-        trimmingCharacters(in: .whitespacesAndNewlines)
+        split(whereSeparator: \.isWhitespace)
+            .joined(separator: " ")
             .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "es"))
+            .lowercased()
     }
 }

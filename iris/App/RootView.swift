@@ -14,30 +14,38 @@ struct RootView: View {
 
     init(dependencies: AppDependencies) {
         self.dependencies = dependencies
-        let sessionStore = SessionStore()
-        _sessionStore = State(initialValue: sessionStore)
-        _authViewModel = State(
-            initialValue: AuthViewModel(
-                authService: dependencies.authService,
-                showcaseProvider: dependencies.showcaseProvider,
-                onAuthenticated: { sessionStore.begin($0) }
-            )
+        // The store tells the sign-in screen why it is back (an expired session shows a banner).
+        var onSignedOut: (SignOutReason) -> Void = { _ in }
+        let sessionStore = SessionStore(authService: dependencies.authService) { onSignedOut($0) }
+        let authViewModel = AuthViewModel(
+            authService: dependencies.authService,
+            showcaseProvider: dependencies.showcaseProvider,
+            onAuthenticated: { sessionStore.begin($0) }
         )
+        onSignedOut = { authViewModel.presentSignOut(reason: $0) }
+        _sessionStore = State(initialValue: sessionStore)
+        _authViewModel = State(initialValue: authViewModel)
     }
 
     var body: some View {
         ZStack {
             if let session = sessionStore.session {
-                SignedInRoot(session: session, dependencies: dependencies) {
-                    sessionStore.end()
-                }
+                SignedInRoot(
+                    session: session,
+                    dependencies: dependencies,
+                    onSignedOut: { sessionStore.end(reason: .requested) },
+                    onSwitched: { sessionStore.begin($0) }
+                )
+                // Another church is another world: rebuild every screen for it.
+                .id(session.church.id)
                 .transition(.opacity)
-            } else {
+            } else if !sessionStore.isRestoring {
                 AuthView(viewModel: authViewModel)
                     .transition(.opacity)
             }
         }
         .animation(IrisMotion.smooth, value: sessionStore.session)
+        .task { await sessionStore.run() }
         .preferredColorScheme(.dark)
         // V1 is Spanish-only; keep dates and times formatted accordingly.
         .environment(\.locale, Locale(identifier: "es"))

@@ -86,12 +86,15 @@ nonisolated struct ServiceRecord: Identifiable, Hashable, Sendable {
     let id: UUID
     var date: Date
     var serviceTypeID: ServiceType.ID
+    /// Name of the service type when the record was saved, shown if the type is deleted.
+    var serviceTypeName: String?
     var blocks: [BlockRecord]
 
-    init(id: UUID = UUID(), date: Date, serviceTypeID: ServiceType.ID, blocks: [BlockRecord]) {
+    init(id: UUID = UUID(), date: Date, serviceTypeID: ServiceType.ID, serviceTypeName: String? = nil, blocks: [BlockRecord]) {
         self.id = id
         self.date = date
         self.serviceTypeID = serviceTypeID
+        self.serviceTypeName = serviceTypeName
         self.blocks = blocks
     }
 

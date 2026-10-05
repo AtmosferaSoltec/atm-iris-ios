@@ -41,6 +41,7 @@ struct ServiceTypesView: View {
             }
         }
         .task { await viewModel.load() }
+        .task { await viewModel.observeChanges() }
         .sheet(item: $viewModel.editor) { editor in
             ServiceTypeEditorView(viewModel: editor)
         }
@@ -60,13 +61,15 @@ struct ServiceTypesView: View {
 
             Spacer(minLength: 0)
 
-            Button {
-                viewModel.createServiceType()
-            } label: {
-                Label("Nuevo servicio", systemImage: "plus")
+            if viewModel.canManage {
+                Button {
+                    viewModel.createServiceType()
+                } label: {
+                    Label("Nuevo servicio", systemImage: "plus")
+                }
+                .buttonStyle(.irisPrimary)
+                .frame(width: 240)
             }
-            .buttonStyle(.irisPrimary)
-            .frame(width: 240)
         }
     }
 
@@ -88,11 +91,13 @@ struct ServiceTypesView: View {
         ContentUnavailableView {
             Label("Aún no hay servicios", systemImage: "calendar")
         } actions: {
-            Button("Crear el primero") {
-                viewModel.createServiceType()
+            if viewModel.canManage {
+                Button("Crear el primero") {
+                    viewModel.createServiceType()
+                }
+                .buttonStyle(.irisPrimary)
+                .frame(width: 260)
             }
-            .buttonStyle(.irisPrimary)
-            .frame(width: 260)
         }
         .foregroundStyle(IrisColor.textSecondary)
         .padding(.top, IrisSpacing.xxl)
@@ -148,11 +153,15 @@ extension ServiceTypesViewModel {
     /// No service types yet.
     static var emptyPreview: ServiceTypesViewModel { makePreview(store: InMemoryChurchStore(seed: .empty)) }
 
-    private static func makePreview(store: InMemoryChurchStore) -> ServiceTypesViewModel {
+    /// An operator: no "Nuevo servicio", cards open read-only.
+    static var operatorPreview: ServiceTypesViewModel { makePreview(store: InMemoryChurchStore(), role: .operator) }
+
+    private static func makePreview(store: InMemoryChurchStore, role: UserSession.Role = .owner) -> ServiceTypesViewModel {
         let viewModel = ServiceTypesViewModel(
             serviceTypes: MockServiceTypeRepository(store: store, latency: .zero),
             people: MockPeopleRepository(store: store, latency: .zero),
-            moduleSettings: MockModuleSettingsRepository(store: store, latency: .zero)
+            moduleSettings: MockModuleSettingsRepository(store: store, latency: .zero),
+            session: .preview(role: role)
         )
         viewModel.apply(serviceTypes: store.serviceTypes, modules: store.modules)
         return viewModel
@@ -172,3 +181,11 @@ extension ServiceTypesViewModel {
         .preferredColorScheme(.dark)
         .environment(\.locale, Locale(identifier: "es"))
 }
+
+#Preview("Operador · Landscape", traits: .landscapeLeft) {
+    ServiceTypesView(viewModel: .operatorPreview)
+        .background { IrisBackground(isAnimated: false) }
+        .preferredColorScheme(.dark)
+        .environment(\.locale, Locale(identifier: "es"))
+}
+

@@ -1,11 +1,12 @@
 //
-//  MockShowcaseContentProvider.swift
+//  StaticShowcaseContentProvider.swift
 //  iris
 //
 
 import Foundation
 
-struct MockShowcaseContentProvider: ShowcaseContentProvider {
+/// Fixed sample verses and lyrics rotating on the sign-in screen (public-domain texts).
+struct StaticShowcaseContentProvider: ShowcaseContentProvider {
     func items() -> [ShowcaseItem] {
         [
             ShowcaseItem(

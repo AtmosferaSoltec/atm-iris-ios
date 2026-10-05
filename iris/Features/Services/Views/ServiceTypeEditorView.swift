@@ -27,13 +27,16 @@ struct ServiceTypeEditorView: View {
                     if let errorMessage = viewModel.errorMessage {
                         IrisBanner(style: .error, message: errorMessage)
                     }
-                    nameSection
-                    colorSection
-                    scheduleSection
-                    if viewModel.showsTimeControl {
-                        timeControlSection
+                    Group {
+                        nameSection
+                        colorSection
+                        scheduleSection
+                        if viewModel.showsTimeControl {
+                            timeControlSection
+                        }
                     }
-                    if !viewModel.isNew {
+                    .disabled(viewModel.isReadOnly)
+                    if !viewModel.isNew, !viewModel.isReadOnly {
                         deleteSection
                     }
                 }
@@ -62,6 +65,8 @@ struct ServiceTypeEditorView: View {
             Group {
                 if viewModel.isNew {
                     Text("Nuevo servicio")
+                } else if viewModel.isReadOnly {
+                    Text(viewModel.name)
                 } else {
                     Text("Editar servicio")
                 }
@@ -71,15 +76,20 @@ struct ServiceTypeEditorView: View {
 
             Spacer()
 
-            Button("Cancelar") { dismiss() }
-                .buttonStyle(.irisPill)
+            if viewModel.isReadOnly {
+                Button("Cerrar") { dismiss() }
+                    .buttonStyle(.irisPill)
+            } else {
+                Button("Cancelar") { dismiss() }
+                    .buttonStyle(.irisPill)
 
-            Button("Guardar") {
-                Task { await viewModel.save() }
+                Button("Guardar") {
+                    Task { await viewModel.save() }
+                }
+                .buttonStyle(.irisPrimary(isLoading: viewModel.isSaving))
+                .frame(width: 180)
+                .disabled(!viewModel.canSave)
             }
-            .buttonStyle(.irisPrimary(isLoading: viewModel.isSaving))
-            .frame(width: 180)
-            .disabled(!viewModel.canSave)
         }
     }
 

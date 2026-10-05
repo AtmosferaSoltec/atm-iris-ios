@@ -3,6 +3,7 @@
 //  iris
 //
 
+import AVFoundation
 import SwiftUI
 
 /// Renders a `ProjectionFrame` at any size with proportional typography,
@@ -12,6 +13,8 @@ struct ProjectionCanvas: View {
     var cornerRadius: CGFloat = IrisRadius.sm
     /// Only the live preview should animate; thumbnails stay static for performance.
     var isAnimated = false
+
+    @Environment(\.projectionVideoPlayer) private var videoPlayer
 
     var body: some View {
         GeometryReader { proxy in
@@ -63,7 +66,12 @@ struct ProjectionCanvas: View {
             .shadow(color: .black.opacity(0.45), radius: width * 0.012)
             .padding(width * 0.07)
 
-        case let .video(title, duration):
+        case .video where videoPlayer != nil:
+            if let videoPlayer {
+                PlayerLayerView(player: videoPlayer)
+            }
+
+        case let .video(title, duration, _):
             VStack(spacing: width * 0.03) {
                 Image(systemName: "play.fill")
                     .font(.system(size: width * 0.05))
@@ -81,8 +89,12 @@ struct ProjectionCanvas: View {
             .foregroundStyle(.white)
             .padding(width * 0.07)
 
-        case let .image(_, artwork):
-            // Full-bleed image. Gradient placeholder until real assets exist.
+        case let .image(_, _, url?):
+            // The real image, whole, over black.
+            LocalImage(url: url, maxPixelSize: Self.imagePixelSize(width), contentMode: .fit)
+
+        case let .image(_, artwork, nil):
+            // Sample data: a gradient stands in for the image.
             LinearGradient(
                 colors: artwork.map { Color(hex: $0) },
                 startPoint: .topLeading,
@@ -92,7 +104,7 @@ struct ProjectionCanvas: View {
                 RadialGradient(colors: [.white.opacity(0.18), .clear], center: .topLeading, startRadius: 0, endRadius: width * 0.8)
             }
 
-        case let .audio(title, duration):
+        case let .audio(title, duration, _):
             VStack(spacing: width * 0.03) {
                 Image(systemName: "waveform")
                     .font(.system(size: width * 0.07, weight: .semibold))
@@ -120,11 +132,33 @@ struct ProjectionCanvas: View {
     }
 }
 
-/// Gradient placeholder for a projection background.
+extension ProjectionCanvas {
+    /// Decode images a bit larger than drawn (thumbnails stay small, the TV gets full resolution).
+    static func imagePixelSize(_ width: CGFloat) -> CGFloat {
+        min(3_840, max(320, width * 2))
+    }
+}
+
+/// A projection background: one of the gradients, or a church image filling the screen.
 struct ProjectionBackgroundView: View {
     let background: ProjectionBackground
 
     var body: some View {
+        GeometryReader { proxy in
+            ZStack {
+                gradient
+                if let url = background.imageURL {
+                    LocalImage(url: url, maxPixelSize: ProjectionCanvas.imagePixelSize(proxy.size.width), contentMode: .fill)
+                        .frame(width: proxy.size.width, height: proxy.size.height)
+                        .clipped()
+                }
+            }
+        }
+        // Darken slightly so white text always clears contrast.
+        .overlay(Color.black.opacity(0.2))
+    }
+
+    private var gradient: some View {
         LinearGradient(
             colors: background.colors.map { Color(hex: $0) },
             startPoint: .topLeading,
@@ -138,8 +172,6 @@ struct ProjectionBackgroundView: View {
                 endRadius: 600
             )
         }
-        // Darken slightly so white text always clears contrast.
-        .overlay(Color.black.opacity(0.2))
     }
 }
 

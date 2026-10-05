@@ -39,10 +39,11 @@ nonisolated struct ServiceItem: Identifiable, Equatable, Sendable {
 nonisolated struct Slide: Identifiable, Hashable, Sendable {
     enum Content: Hashable, Sendable {
         case text(String, footnote: String?)
-        case image(title: String, artwork: [UInt32])
-        case video(title: String, duration: String)
+        /// `url` is the cached file; `nil` in sample data, which draws `artwork` instead.
+        case image(title: String, artwork: [UInt32], url: URL? = nil)
+        case video(title: String, duration: String, url: URL? = nil)
         /// Audio plays in the room; nothing changes on the TV.
-        case audio(title: String, duration: String)
+        case audio(title: String, duration: String, url: URL? = nil)
     }
 
     let id: UUID

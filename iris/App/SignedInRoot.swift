@@ -12,14 +12,26 @@ final class SignedInNavigator {
         case home, console(ServiceType), modules, services, people, times
     }
 
-    var route: Route = .home
+    private(set) var route: Route = .home
+
+    /// Paused while a service runs: the console works with the copy it had when it started.
+    private let sync: any SyncService
+
+    init(sync: any SyncService) {
+        self.sync = sync
+    }
 
     func navigate(to route: Route) {
+        if case .console = route {
+            sync.suspend()
+        } else {
+            sync.resume()
+        }
         self.route = route
     }
 
     func returnHome() {
-        route = .home
+        navigate(to: .home)
     }
 }
 
@@ -28,27 +40,43 @@ final class SignedInNavigator {
 struct SignedInRoot: View {
     private let session: UserSession
     private let dependencies: AppDependencies
-    private let onSignOut: () -> Void
 
+    @State private var context: SessionContext
     @State private var navigator: SignedInNavigator
     @State private var homeViewModel: HomeViewModel
+    @State private var account: AccountViewModel
 
-    init(session: UserSession, dependencies: AppDependencies, onSignOut: @escaping () -> Void) {
+    init(
+        session: UserSession,
+        dependencies: AppDependencies,
+        onSignedOut: @escaping () -> Void,
+        onSwitched: @escaping (UserSession) -> Void
+    ) {
         self.session = session
         self.dependencies = dependencies
-        self.onSignOut = onSignOut
 
-        let navigator = SignedInNavigator()
+        let context = SessionContext(session)
+        _context = State(initialValue: context)
+        let navigator = SignedInNavigator(sync: dependencies.sync)
         _navigator = State(initialValue: navigator)
+        _account = State(initialValue: AccountViewModel(
+            context: context,
+            authService: dependencies.authService,
+            sync: dependencies.sync,
+            onSignedOut: onSignedOut,
+            onSwitched: onSwitched
+        ))
         _homeViewModel = State(
             initialValue: HomeViewModel(
-                session: session,
+                session: context,
                 moduleSettings: dependencies.moduleSettings,
                 serviceTypes: dependencies.serviceTypes,
                 people: dependencies.people,
                 timeRecords: dependencies.timeRecords,
                 libraryRepository: dependencies.libraryRepository,
                 displayOutput: dependencies.displayOutput,
+                sync: dependencies.sync,
+                reloadSession: { await dependencies.authService.reloadSession() },
                 onNavigate: { navigator.navigate(to: $0) }
             )
         )
@@ -58,23 +86,23 @@ struct SignedInRoot: View {
         ZStack {
             switch navigator.route {
             case .home:
-                HomeView(viewModel: homeViewModel, onSignOut: onSignOut)
+                HomeView(viewModel: homeViewModel, account: account)
                     .transition(.opacity)
             case let .console(serviceType):
                 LiveConsoleScreen(
-                    session: session,
+                    session: context,
                     serviceType: serviceType,
                     modules: homeViewModel.modules,
                     people: homeViewModel.people,
                     dependencies: dependencies,
                     onExit: { navigator.returnHome() },
                     onOpenTimes: { navigator.navigate(to: .times) },
-                    onSignOut: onSignOut
+                    account: account
                 )
                 .transition(.opacity)
             case .modules:
                 secondaryScreen(String(localized: "Módulos")) {
-                    ModulesView(viewModel: ModulesViewModel(moduleSettings: dependencies.moduleSettings))
+                    ModulesView(viewModel: ModulesViewModel(moduleSettings: dependencies.moduleSettings, session: context))
                 }
                     .transition(.opacity)
             case .services:
@@ -83,14 +111,15 @@ struct SignedInRoot: View {
                         viewModel: ServiceTypesViewModel(
                             serviceTypes: dependencies.serviceTypes,
                             people: dependencies.people,
-                            moduleSettings: dependencies.moduleSettings
+                            moduleSettings: dependencies.moduleSettings,
+                            session: context
                         )
                     )
                 }
                     .transition(.opacity)
             case .people:
                 secondaryScreen(String(localized: "Personas")) {
-                    PeopleView(viewModel: PeopleViewModel(people: dependencies.people, timeRecords: dependencies.timeRecords))
+                    PeopleView(viewModel: PeopleViewModel(people: dependencies.people, timeRecords: dependencies.timeRecords, session: context))
                 }
                     .transition(.opacity)
             case .times:
@@ -99,7 +128,8 @@ struct SignedInRoot: View {
                         viewModel: TimesViewModel(
                             timeRecords: dependencies.timeRecords,
                             serviceTypes: dependencies.serviceTypes,
-                            people: dependencies.people
+                            people: dependencies.people,
+                            session: context
                         )
                     )
                 }
@@ -107,6 +137,9 @@ struct SignedInRoot: View {
             }
         }
         .animation(IrisMotion.smooth, value: navigator.route)
+        .task { await dependencies.sync.start(session: session) }
+        // Role and permission changes reach every open screen without rebuilding them.
+        .onChange(of: session) { _, session in context.session = session }
     }
 
     /// Top bar with "‹ Inicio" and the screen title, over the ambient background.
@@ -115,10 +148,9 @@ struct SignedInRoot: View {
             ConsoleTopBar(
                 title: title,
                 display: homeViewModel.display,
-                churchName: session.churchName,
-                initials: homeViewModel.accountInitials,
-                onExit: { navigator.returnHome() },
-                onSignOut: { onSignOut() }
+                account: account,
+                sync: dependencies.sync,
+                onExit: { navigator.returnHome() }
             )
             content()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

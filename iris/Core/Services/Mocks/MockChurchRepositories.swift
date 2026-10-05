@@ -103,8 +103,31 @@ struct MockTimeRecordRepository: TimeRecordRepository {
         store.records.sort { $0.date > $1.date }
     }
 
+    func adjust(_ recordID: ServiceRecord.ID, block blockID: BlockRecord.ID, actualSeconds: TimeInterval) async throws {
+        try await Task.sleep(for: latency)
+        update(recordID, blockID) { block in
+            block.actualSeconds = max(0, actualSeconds)
+            block.status = .adjusted
+        }
+    }
+
+    func changeLeader(_ recordID: ServiceRecord.ID, block blockID: BlockRecord.ID, to personID: Person.ID?) async throws {
+        try await Task.sleep(for: latency)
+        let name = personID.flatMap { id in store.people.first { $0.id == id }?.name }
+        update(recordID, blockID) { block in
+            block.personID = personID
+            block.personName = name
+        }
+    }
+
     func delete(_ id: ServiceRecord.ID) async throws {
         try await Task.sleep(for: latency)
         store.records.removeAll { $0.id == id }
+    }
+
+    private func update(_ recordID: ServiceRecord.ID, _ blockID: BlockRecord.ID, change: (inout BlockRecord) -> Void) {
+        guard let recordIndex = store.records.firstIndex(where: { $0.id == recordID }),
+              let blockIndex = store.records[recordIndex].blocks.firstIndex(where: { $0.id == blockID }) else { return }
+        change(&store.records[recordIndex].blocks[blockIndex])
     }
 }

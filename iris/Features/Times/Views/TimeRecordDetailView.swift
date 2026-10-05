@@ -21,7 +21,9 @@ struct TimeRecordDetailView: View {
                         TimeBlockRow(viewModel: viewModel, record: record, block: block, scale: viewModel.barScale(for: record))
                     }
                 }
-                deleteButton
+                if viewModel.canManage {
+                    deleteButton
+                }
             }
         }
         .scrollIndicators(.hidden)
@@ -126,7 +128,9 @@ private struct TimeBlockRow: View {
             } else {
                 IrisTimeBar(planned: block.plannedSeconds, actual: block.actualSeconds, scale: scale)
                 times
-                menu
+                if viewModel.canManage {
+                    menu
+                }
             }
         }
         .padding(.vertical, IrisSpacing.xs)

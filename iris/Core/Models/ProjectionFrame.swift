@@ -9,9 +9,19 @@ import Foundation
 nonisolated struct ProjectionBackground: Identifiable, Hashable, Sendable {
     let id: String
     var name: String
-    /// Gradient stops as 24-bit hex values. Placeholder until real image/video assets exist.
+    /// Gradient stops as 24-bit hex values. Also the placeholder while an image background loads.
     var colors: [UInt32]
     var isAnimated: Bool
+    /// A church image marked as background, drawn to fill the screen.
+    var imageURL: URL?
+
+    init(id: String, name: String, colors: [UInt32], isAnimated: Bool, imageURL: URL? = nil) {
+        self.id = id
+        self.name = name
+        self.colors = colors
+        self.isAnimated = isAnimated
+        self.imageURL = imageURL
+    }
 }
 
 /// Everything the TV needs to render one moment of output.
@@ -20,9 +30,10 @@ nonisolated struct ProjectionFrame: Equatable, Sendable {
     enum Content: Hashable, Sendable {
         case blank
         case text(String, footnote: String?)
-        case image(title: String, artwork: [UInt32])
-        case video(title: String, duration: String)
-        case audio(title: String, duration: String)
+        /// `url` is the cached file; `nil` draws the `artwork` placeholder.
+        case image(title: String, artwork: [UInt32], url: URL? = nil)
+        case video(title: String, duration: String, url: URL? = nil)
+        case audio(title: String, duration: String, url: URL? = nil)
         case logo(String)
     }
 

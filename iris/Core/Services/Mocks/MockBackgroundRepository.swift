@@ -10,7 +10,12 @@ struct MockBackgroundRepository: BackgroundRepository {
         Self.sample
     }
 
-    static let sample: [ProjectionBackground] = [
+    static let sample = ProjectionBackground.gradients
+}
+
+extension ProjectionBackground {
+    /// The six built-in gradients every church has.
+    static let gradients: [ProjectionBackground] = [
         ProjectionBackground(id: "aurora", name: "Aurora", colors: [0x2A1658, 0x4E2A8C, 0x131E5C], isAnimated: true),
         ProjectionBackground(id: "brasa", name: "Brasa", colors: [0x3A1E08, 0x8C3A1E, 0x3D1235], isAnimated: false),
         ProjectionBackground(id: "oceano", name: "Océano", colors: [0x06283D, 0x0E5E6F, 0x0A1931], isAnimated: true),

@@ -197,7 +197,7 @@ struct HomeHeroCard: View {
                 ProjectionCanvas(
                     frame: ProjectionFrame(
                         background: Self.tvPreviewBackground,
-                        content: .logo(viewModel.session.churchName)
+                        content: .logo(viewModel.session.church.name)
                     ),
                     cornerRadius: IrisRadius.lg
                 )

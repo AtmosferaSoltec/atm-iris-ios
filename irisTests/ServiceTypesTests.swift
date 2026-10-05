@@ -210,7 +210,7 @@ struct ServiceTypesTests {
 
     @Test func homeReflectsTheChanges() async throws {
         let home = HomeViewModel(
-            session: UserSession(id: UUID(), churchName: "Iglesia Vida Nueva", leaderName: "Daniel Ruiz", email: "pastor@vidanueva.org"),
+            session: .preview,
             moduleSettings: MockModuleSettingsRepository(store: store, latency: .zero),
             serviceTypes: MockServiceTypeRepository(store: store, latency: .zero),
             people: MockPeopleRepository(store: store, latency: .zero),

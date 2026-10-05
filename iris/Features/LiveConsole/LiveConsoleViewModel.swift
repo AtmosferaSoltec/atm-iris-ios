@@ -3,6 +3,7 @@
 //  iris
 //
 
+import AVFoundation
 import Foundation
 import Observation
 
@@ -23,7 +24,7 @@ final class LiveConsoleViewModel {
         let itemID: ServiceItem.ID
         let kind: ServiceItem.Kind
         let title: String
-        let duration: TimeInterval
+        var duration: TimeInterval
         var elapsed: TimeInterval = 0
         var isPlaying = true
         var isLooping = false
@@ -94,10 +95,13 @@ final class LiveConsoleViewModel {
     private(set) var isRecordSaved = false
     private(set) var isSavingRecord = false
     private(set) var recordError: String?
+    /// Saved on the iPad but not yet on the API (no connection): "Se enviará cuando haya conexión".
+    private(set) var isRecordPendingUpload = false
     private var savesTemplate = false
     private var pendingExit: (() -> Void)?
 
-    let session: UserSession
+    let context: SessionContext
+    var session: UserSession { context.session }
     /// Service type chosen on Home, if any.
     let serviceType: ServiceType?
     /// Church modules when the service started. What is off disappears from the console.
@@ -119,7 +123,7 @@ final class LiveConsoleViewModel {
     private let clock: () -> Date
 
     init(
-        session: UserSession,
+        session: SessionContext,
         serviceType: ServiceType? = nil,
         modules: ChurchModules,
         people: [Person] = [],
@@ -134,7 +138,7 @@ final class LiveConsoleViewModel {
         timeRecords: any TimeRecordRepository,
         clock: @escaping () -> Date = { .now }
     ) {
-        self.session = session
+        context = session
         self.serviceType = serviceType
         self.modules = modules
         self.people = people
@@ -149,7 +153,8 @@ final class LiveConsoleViewModel {
         self.timeRecords = timeRecords
         self.clock = clock
         now = clock()
-        if modules.timeControl, let serviceType, serviceType.tracksTime {
+        // Timing a service ends in saving its record, which needs `records.write`.
+        if modules.timeControl, session.can(.recordsWrite), let serviceType, serviceType.tracksTime {
             blockTimer = BlockTimer(template: serviceType.blocks)
         }
     }
@@ -201,16 +206,7 @@ final class LiveConsoleViewModel {
         backgrounds.first { $0.id == selectedBackgroundID }
     }
 
-    var accountInitials: String {
-        session.churchName
-            .split(separator: " ")
-            .filter { $0.count > 2 }
-            .prefix(2)
-            .compactMap(\.first)
-            .map(String.init)
-            .joined()
-            .uppercased()
-    }
+    var accountInitials: String { session.churchInitials }
 
     /// The frame currently on the TV.
     var liveFrame: ProjectionFrame {
@@ -288,11 +284,11 @@ final class LiveConsoleViewModel {
         let position = SlidePosition(itemID: item.id, slideIndex: slideIndex)
 
         switch item.slides[slideIndex].content {
-        case let .audio(title, duration):
-            startPlayback(of: item, kind: .music, title: title, duration: duration)
-        case let .video(title, duration):
+        case let .audio(title, duration, url):
+            startPlayback(of: item, kind: .music, title: title, duration: duration, url: url)
+        case let .video(title, duration, url):
             show(position)
-            startPlayback(of: item, kind: .video, title: title, duration: duration)
+            startPlayback(of: item, kind: .video, title: title, duration: duration, url: url)
         case .text, .image:
             show(position)
         }
@@ -366,8 +362,33 @@ final class LiveConsoleViewModel {
         self.playback = nil
     }
 
-    /// Advances simulated playback time until the calling task is cancelled.
+    /// The video on the TV, for the live preview.
+    var videoPlayer: AVPlayer? { displayOutput.videoPlayer }
+
+    /// Follows the TV connecting and disconnecting, until the calling task is cancelled.
+    func observeDisplay() async {
+        for await display in displayOutput.displayUpdates() {
+            self.display = display
+        }
+    }
+
+    /// Keeps elapsed time in step with playback until the calling task is cancelled:
+    /// real positions from the live service, simulated ones with the mock.
     func runPlaybackClock() async {
+        guard !mediaPlayback.reportsProgress else {
+            for await progress in mediaPlayback.progressUpdates() {
+                guard var playback, playback.itemID == progress.itemID else { continue }
+                if progress.didFinish {
+                    stopPlayback()
+                    continue
+                }
+                playback.elapsed = progress.elapsed
+                playback.duration = progress.duration > 0 ? progress.duration : playback.duration
+                playback.isPlaying = progress.isPlaying
+                self.playback = playback
+            }
+            return
+        }
         let step: TimeInterval = 0.5
         while !Task.isCancelled {
             try? await Task.sleep(for: .seconds(step))
@@ -700,8 +721,12 @@ final class LiveConsoleViewModel {
         }
     }
 
+    /// "Guardar en la plantilla" needs `serviceTypes.manage`; without it the question only offers "Solo hoy".
+    var canSaveTemplate: Bool { context.can(.serviceTypesManage) }
+
     /// "Solo hoy" or "Guardar en la plantilla". Only times are saved, never the content used.
-    func saveRecord(updatingTemplate: Bool) async {
+    func saveRecord(updatingTemplate requested: Bool) async {
+        let updatingTemplate = requested && canSaveTemplate
         guard let blockTimer, let record = finishedRecord, let serviceType, !isSavingRecord, !isRecordSaved else { return }
         savesTemplate = updatingTemplate
         isSavingRecord = true
@@ -714,6 +739,7 @@ final class LiveConsoleViewModel {
             }
             try await timeRecords.save(record)
             isRecordSaved = true
+            Task { await watchRecordUpload(record.id) }
         } catch {
             recordError = String(localized: "No pudimos guardar los tiempos. Inténtalo de nuevo.")
         }
@@ -721,6 +747,17 @@ final class LiveConsoleViewModel {
         if isRecordSaved, let exit = pendingExit {
             pendingExit = nil
             exit()
+        }
+    }
+
+    /// Follows the saved record until it reaches the API, so the finished state can say so.
+    private func watchRecordUpload(_ id: ServiceRecord.ID) async {
+        // Give the outbox a moment to send it before showing anything.
+        try? await Task.sleep(for: .seconds(2))
+        isRecordPendingUpload = await timeRecords.isPendingUpload(id)
+        while isRecordPendingUpload, !Task.isCancelled {
+            try? await Task.sleep(for: .seconds(5))
+            isRecordPendingUpload = await timeRecords.isPendingUpload(id)
         }
     }
 
@@ -791,7 +828,7 @@ final class LiveConsoleViewModel {
         guard let serviceType else { return nil }
         let date = timer.blocks.compactMap(\.startedAt).min() ?? service?.date ?? clock()
         let names = Dictionary(people.map { ($0.id, $0.name) }, uniquingKeysWith: { first, _ in first })
-        return timer.record(serviceTypeID: serviceType.id, date: date, peopleNames: names)
+        return timer.record(serviceTypeID: serviceType.id, serviceTypeName: serviceType.name, date: date, peopleNames: names)
     }
 
     /// "Santa Cena y Anuncios", "a, b y c".
@@ -823,7 +860,7 @@ final class LiveConsoleViewModel {
         pushOutput()
     }
 
-    private func startPlayback(of item: ServiceItem, kind: ServiceItem.Kind, title: String, duration: String) {
+    private func startPlayback(of item: ServiceItem, kind: ServiceItem.Kind, title: String, duration: String, url: URL?) {
         // Without Multimedia the mini player never appears.
         guard modules.multimedia else { return }
         if playback?.itemID == item.id {
@@ -832,7 +869,7 @@ final class LiveConsoleViewModel {
             return
         }
         mediaPlayback.stop()
-        mediaPlayback.play(itemID: item.id)
+        mediaPlayback.play(itemID: item.id, url: url, kind: kind, title: title)
         playback = Playback(itemID: item.id, kind: kind, title: title, duration: Self.seconds(from: duration))
     }
 
@@ -848,9 +885,9 @@ final class LiveConsoleViewModel {
     private func projectionContent(for slide: Slide) -> ProjectionFrame.Content {
         switch slide.content {
         case let .text(text, footnote): .text(text, footnote: footnote)
-        case let .image(title, artwork): .image(title: title, artwork: artwork)
-        case let .video(title, duration): .video(title: title, duration: duration)
-        case let .audio(title, duration): .audio(title: title, duration: duration)
+        case let .image(title, artwork, url): .image(title: title, artwork: artwork, url: url)
+        case let .video(title, duration, url): .video(title: title, duration: duration, url: url)
+        case let .audio(title, duration, url): .audio(title: title, duration: duration, url: url)
         }
     }
 

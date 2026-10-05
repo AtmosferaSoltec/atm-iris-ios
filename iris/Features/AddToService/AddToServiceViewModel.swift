@@ -57,8 +57,16 @@ final class AddToServiceViewModel: Identifiable {
     // MARK: Derived
 
     var filteredLyrics: [LyricSheet] {
-        lyrics.filter { matches($0.title) || matches($0.author) }
+        lyrics.filter { sheet in
+            matches(sheet.title) || matches(sheet.author) || sheet.sections.contains { section in
+                if case let .text(text, _) = section.content { return matches(text) }
+                return false
+            }
+        }
     }
+
+    /// The church has no songs yet (not a search without results).
+    var isLibraryEmpty: Bool { tab == .lyrics && lyrics.isEmpty }
 
     var filteredMusic: [MediaAsset] { music.filter { matches($0.title) || matches($0.subtitle) } }
     var filteredImages: [MediaAsset] { images.filter { matches($0.title) } }
@@ -104,7 +112,25 @@ final class AddToServiceViewModel: Identifiable {
         isLoading = false
     }
 
+    /// Reloads silently while open (new songs, download progress), until the calling task is cancelled.
+    func observeChanges() async {
+        for await _ in repository.changes() {
+            guard !isLoading else { continue }
+            let media = ((try? await repository.media(of: .music)) ?? music)
+                + ((try? await repository.media(of: .image)) ?? images)
+                + ((try? await repository.media(of: .video)) ?? videos)
+            apply(lyrics: (try? await repository.lyrics()) ?? lyrics, media: media)
+            // A selection whose file disappeared can no longer be added.
+            selection.removeAll { item in
+                if case let .media(id) = item { return !media.contains { $0.id == id && $0.isAvailable } }
+                return false
+            }
+        }
+    }
+
     func toggle(_ item: Selection) {
+        // Files still downloading cannot be added: the service must work offline.
+        if case let .media(id) = item, (music + images + videos).first(where: { $0.id == id })?.isAvailable == false { return }
         if let index = selection.firstIndex(of: item) {
             selection.remove(at: index)
         } else {
@@ -140,21 +166,21 @@ final class AddToServiceViewModel: Identifiable {
                     kind: .music,
                     title: asset.title,
                     subtitle: "\(asset.subtitle) · \(asset.duration ?? "")",
-                    slides: [Slide(content: .audio(title: asset.title, duration: asset.duration ?? ""))]
+                    slides: [Slide(content: .audio(title: asset.title, duration: asset.duration ?? "", url: asset.localURL))]
                 )
             case .image:
                 return ServiceItem(
                     kind: .image,
                     title: asset.title,
                     subtitle: asset.subtitle,
-                    slides: [Slide(content: .image(title: asset.title, artwork: asset.artwork))]
+                    slides: [Slide(content: .image(title: asset.title, artwork: asset.artwork, url: asset.localURL))]
                 )
             case .video:
                 return ServiceItem(
                     kind: .video,
                     title: asset.title,
                     subtitle: String(localized: "Video · \(asset.duration ?? "")"),
-                    slides: [Slide(content: .video(title: asset.title, duration: asset.duration ?? ""))]
+                    slides: [Slide(content: .video(title: asset.title, duration: asset.duration ?? "", url: asset.localURL))]
                 )
             }
         }

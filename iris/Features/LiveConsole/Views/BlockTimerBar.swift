@@ -26,8 +26,10 @@ struct BlockTimerBar: View {
             Button("Solo hoy") {
                 Task { await viewModel.saveRecord(updatingTemplate: false) }
             }
-            Button("Guardar en la plantilla") {
-                Task { await viewModel.saveRecord(updatingTemplate: true) }
+            if viewModel.canSaveTemplate {
+                Button("Guardar en la plantilla") {
+                    Task { await viewModel.saveRecord(updatingTemplate: true) }
+                }
             }
         } message: {
             Text(viewModel.templateChangesMessage)
@@ -305,6 +307,11 @@ struct BlockTimerBar: View {
             }
             .buttonStyle(.irisPill)
         } else if viewModel.isRecordSaved {
+            if viewModel.isRecordPendingUpload {
+                Label("Se enviará cuando haya conexión", systemImage: "icloud.slash")
+                    .font(IrisFont.caption)
+                    .foregroundStyle(IrisColor.warning)
+            }
             Button("Ver en Tiempos") { onOpenTimes() }
                 .buttonStyle(.irisLink)
         } else {

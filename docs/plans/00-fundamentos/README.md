@@ -58,4 +58,13 @@ de transporte (DTO), almacenamiento seguro y el interruptor entre datos de prueb
 
 ## Desviaciones
 
-_(Completar al cerrar la fase.)_
+- Los `.xcconfig` y el `Info.plist` propio viven en `Config/` (raíz del repo, fuera de la carpeta sincronizada `iris/`
+  para que Xcode no los copie como recursos). El `Info.plist` se combina con el generado (`GENERATE_INFOPLIST_FILE` sigue en `YES`).
+  Se agregó `NSLocalNetworkUsageDescription` para el iPad físico contra la IP de la Mac.
+- El esquema `iris` ejecutaba (Run) en **Release**; pasó a **Debug** para que el simulador use `IRIS_API_BASE_URL`.
+- Los DTO guardan los ids como `String` (tal cual el contrato) y `Mapping.swift` los convierte a `UUID`; la app envía los
+  UUID en minúsculas (`UUID.apiString`).
+- Además de los tipos listados hay cuerpos de petición (`SignInBody`, `PersonCreateBody`, `ServiceRecordInputDTO`…),
+  `MessageDTO`, `DownloadURLDTO` y `BibleTranslationDTO`/`BibleBookDTO`. No hay DTO de subida de archivos: el iPad no sube.
+- `Person` no lleva `blockCount`: Personas lo sigue calculando con los registros de la copia local (mismo criterio que la API).
+- `ServiceRecord` gana `serviceTypeName` y `LyricSheet` gana `copyright` (los usan las fases 05 y 08).

@@ -27,6 +27,8 @@ enum IrisFont {
     static let caption = Font.system(.caption, weight: .medium)
     /// Small uppercase labels. Pair with `IrisTracking.overline`.
     static let overline = Font.system(.caption2, weight: .bold)
+    /// Emailed one-time codes. Pair with `IrisTracking.code`.
+    static let code = Font.system(.title2, design: .monospaced, weight: .semibold)
 }
 
 /// Letter-spacing tokens.
@@ -34,4 +36,5 @@ enum IrisTracking {
     static let tight: CGFloat = -0.5
     static let overline: CGFloat = 2.0
     static let caps: CGFloat = 1.2
+    static let code: CGFloat = 8
 }

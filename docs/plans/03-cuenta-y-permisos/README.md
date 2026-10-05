@@ -43,4 +43,11 @@ Usa `session.can(_:)`. Sin el permiso la acción **no aparece** (salvo donde se 
 
 ## Desviaciones
 
-_(Completar al cerrar la fase.)_
+- Los permisos se leen de un `SessionContext` observable compartido por las pantallas: un cambio de rol (refresh o
+  `GET /auth/me`) se aplica sin reconstruirlas, para no perder un servicio en curso. Solo el cambio de iglesia reconstruye.
+- Cambiar de iglesia no borra la copia antes de `switch-church`: si el API falla se conserva todo. La copia anterior se
+  borra cuando la nueva iglesia arranca (`LocalStore.prepare(for:)`).
+- Nombre, correo, iglesia y rol del encabezado del menú son botones deshabilitados (un `Menu` no admite otro contenido).
+- El cronómetro de bloques solo aparece con `records.write` (sin él no se podría guardar el registro).
+- Vistas previas por rol: Módulos, Servicios y Tiempos tienen una de `operator`. Se compilaron; no hubo herramienta para
+  renderizarlas en esta sesión.

@@ -11,6 +11,8 @@ import UIKit
 struct IrisTextField<Field: Hashable>: View {
     enum Kind {
         case text, name, organization, email, password, newPassword
+        /// Emailed numeric code: number pad, large spaced digits.
+        case oneTimeCode
 
         var isSecure: Bool { self == .password || self == .newPassword }
 
@@ -22,18 +24,31 @@ struct IrisTextField<Field: Hashable>: View {
             case .email: .emailAddress
             case .password: .password
             case .newPassword: .newPassword
+            case .oneTimeCode: .oneTimeCode
             }
         }
 
         var keyboardType: UIKeyboardType {
-            self == .email ? .emailAddress : .default
+            switch self {
+            case .email: .emailAddress
+            case .oneTimeCode: .numberPad
+            default: .default
+            }
+        }
+
+        var font: Font {
+            self == .oneTimeCode ? IrisFont.code : IrisFont.body
+        }
+
+        var tracking: CGFloat {
+            self == .oneTimeCode ? IrisTracking.code : 0
         }
 
         var autocapitalization: TextInputAutocapitalization {
             switch self {
             case .text: .sentences
             case .name, .organization: .words
-            case .email, .password, .newPassword: .never
+            case .email, .password, .newPassword, .oneTimeCode: .never
             }
         }
     }
@@ -123,7 +138,8 @@ struct IrisTextField<Field: Hashable>: View {
                 TextField(text: $text, prompt: promptText) { Text(label) }
             }
         }
-        .font(IrisFont.body)
+        .font(kind.font)
+        .tracking(kind.tracking)
         .foregroundStyle(IrisColor.textPrimary)
         .tint(IrisColor.coral)
         .focused(focus, equals: field)

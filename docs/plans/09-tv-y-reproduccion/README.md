@@ -47,4 +47,17 @@ implementaciones de `DisplayOutputService` y `MediaPlaybackService`.
 
 ## Desviaciones
 
-_(Completar al cerrar la fase.)_
+- No hubo `DocumentationSearch` en esta sesión. Se usó el mecanismo documentado desde iPadOS 16: el delegado de la app
+  devuelve, para el rol `windowExternalDisplayNonInteractive`, una `UISceneConfiguration` con
+  `ExternalDisplaySceneDelegate` (ventana con `UIHostingController`); los demás roles quedan para SwiftUI. No hace
+  falta declarar el rol en el `Info.plist`. En modo espejo (sin escena externa) el sistema replica el iPad.
+- El nombre de la pantalla es el del receptor AirPlay cuando la ruta de audio lo informa; si no, "Pantalla externa".
+- `ProjectionStore.shared` es un singleton porque UIKit crea la escena externa por su cuenta.
+- El video se dibuja dentro de `ProjectionCanvas` mediante el valor de entorno `projectionVideoPlayer` (en el TV y en la
+  vista EN VIVO de la consola); sin reproductor, el lienzo conserva el marcador de las vistas previas.
+- `MediaPlaybackService.play` recibe la URL local, el tipo y el título, y el protocolo gana `reportsProgress` y
+  `progressUpdates()`; `runPlaybackClock` lee del servicio en modo live y simula con el mock.
+- `DisplayOutputService` gana `displayUpdates()` y `videoPlayer`; Inicio y la consola siguen la conexión en vivo.
+- `UIBackgroundModes = audio` en `Config/Info.plist` para que la música siga con la pantalla bloqueada.
+- No se probó en el simulador con *I/O › External Displays* (no hay forma de manejar ese menú desde esta sesión):
+  queda para la verificación manual de la fase 10 / revisor.

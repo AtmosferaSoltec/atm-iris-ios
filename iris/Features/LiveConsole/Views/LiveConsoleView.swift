@@ -11,7 +11,7 @@ struct LiveConsoleView: View {
     @Bindable var viewModel: LiveConsoleViewModel
     var onExit: (() -> Void)?
     var onOpenTimes: () -> Void = {}
-    let onSignOut: () -> Void
+    let account: AccountViewModel
 
     private let wideLayoutMinWidth: CGFloat = 1_150
 
@@ -21,10 +21,8 @@ struct LiveConsoleView: View {
                 title: viewModel.serviceTitle,
                 date: viewModel.service?.date,
                 display: viewModel.display,
-                churchName: viewModel.session.churchName,
-                initials: viewModel.accountInitials,
-                onExit: onExit.map { exit in { viewModel.requestExit(then: exit) } },
-                onSignOut: { onSignOut() }
+                account: account,
+                onExit: onExit.map { exit in { viewModel.requestExit(then: exit) } }
             )
 
             content
@@ -33,6 +31,7 @@ struct LiveConsoleView: View {
         .task { await viewModel.load() }
         .task { await viewModel.runPlaybackClock() }
         .task { await viewModel.runBlockClock() }
+        .task { await viewModel.observeDisplay() }
         .alert("El servicio sigue en curso", isPresented: $viewModel.isConfirmingExit) {
             Button("Terminar y guardar") {
                 Task { await viewModel.finishAndExit() }
@@ -95,6 +94,7 @@ struct LiveConsoleView: View {
             IrisSurface(padding: IrisSpacing.sm, cornerRadius: IrisRadius.xl) {
                 VStack(spacing: IrisSpacing.md) {
                     LiveScreenView(frame: viewModel.liveFrame)
+                        .environment(\.projectionVideoPlayer, viewModel.videoPlayer)
 
                     if let playback = viewModel.playback {
                         NowPlayingView(
@@ -140,7 +140,7 @@ struct LiveConsoleView: View {
 }
 
 #Preview("Landscape", traits: .landscapeLeft) {
-    LiveConsoleView(viewModel: .preview, onSignOut: {})
+    LiveConsoleView(viewModel: .preview, account: .preview())
         .preferredColorScheme(.dark)
         .environment(\.locale, Locale(identifier: "es"))
 }
@@ -152,19 +152,19 @@ struct LiveConsoleView: View {
         viewModel.presentSelectedMedia()
         viewModel.seek(to: 52)
     }
-    return LiveConsoleView(viewModel: viewModel, onSignOut: {})
+    return LiveConsoleView(viewModel: viewModel, account: .preview())
         .preferredColorScheme(.dark)
         .environment(\.locale, Locale(identifier: "es"))
 }
 
 #Preview("Sin Biblia ni multimedia", traits: .landscapeLeft) {
-    LiveConsoleView(viewModel: .limitedPreview, onSignOut: {})
+    LiveConsoleView(viewModel: .limitedPreview, account: .preview())
         .preferredColorScheme(.dark)
         .environment(\.locale, Locale(identifier: "es"))
 }
 
 #Preview("Servicio iniciado", traits: .landscapeLeft) {
-    LiveConsoleView(viewModel: .startedServicePreview, onExit: {}, onSignOut: {})
+    LiveConsoleView(viewModel: .startedServicePreview, onExit: {}, account: .preview())
         .preferredColorScheme(.dark)
         .environment(\.locale, Locale(identifier: "es"))
 }
@@ -198,7 +198,7 @@ extension LiveConsoleViewModel {
     ) -> LiveConsoleViewModel {
         let store = InMemoryChurchStore()
         let viewModel = LiveConsoleViewModel(
-            session: UserSession(id: UUID(), churchName: "Iglesia Vida Nueva", leaderName: "Daniel Ruiz", email: "pastor@vidanueva.org"),
+            session: .preview,
             serviceType: serviceType,
             modules: modules,
             people: people,

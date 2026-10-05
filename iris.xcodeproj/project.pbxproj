@@ -19,6 +19,9 @@
 /* Begin PBXFileReference section */
 		A00DBF9D3072C80B002AC7EE /* iris.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = iris.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B10DC0023072D00A002AC7EE /* irisTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = irisTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		C0FF00013072D00A002AC7EE /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
+		C0FF00023072D00A002AC7EE /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
+		C0FF00033072D00A002AC7EE /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -53,6 +56,7 @@
 			children = (
 				A00DBF9F3072C80B002AC7EE /* iris */,
 				B10DC0033072D00A002AC7EE /* irisTests */,
+				C0FF00043072D00A002AC7EE /* Config */,
 				A00DBF9E3072C80B002AC7EE /* Products */,
 			);
 			sourceTree = "<group>";
@@ -64,6 +68,16 @@
 				B10DC0023072D00A002AC7EE /* irisTests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		C0FF00043072D00A002AC7EE /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				C0FF00013072D00A002AC7EE /* Debug.xcconfig */,
+				C0FF00023072D00A002AC7EE /* Release.xcconfig */,
+				C0FF00033072D00A002AC7EE /* Info.plist */,
+			);
+			path = Config;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -300,7 +314,9 @@
 		};
 		A00DBFA93072C80C002AC7EE /* Debug configuration for PBXNativeTarget "iris" */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = C0FF00013072D00A002AC7EE /* Debug.xcconfig */;
 			buildSettings = {
+				INFOPLIST_FILE = Config/Info.plist;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
@@ -340,7 +356,9 @@
 		};
 		A00DBFAA3072C80C002AC7EE /* Release configuration for PBXNativeTarget "iris" */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = C0FF00023072D00A002AC7EE /* Release.xcconfig */;
 			buildSettings = {
+				INFOPLIST_FILE = Config/Info.plist;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;

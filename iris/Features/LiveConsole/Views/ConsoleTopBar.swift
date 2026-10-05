@@ -11,10 +11,10 @@ struct ConsoleTopBar: View {
     var title: String?
     var date: Date?
     let display: ExternalDisplay?
-    let churchName: String
-    let initials: String
+    let account: AccountViewModel
+    /// Sync state, on Home and the church screens (not inside a service).
+    var sync: (any SyncService)?
     var onExit: (() -> Void)?
-    let onSignOut: () -> Void
 
     var body: some View {
         HStack(spacing: IrisSpacing.lg) {
@@ -40,8 +40,11 @@ struct ConsoleTopBar: View {
             Spacer(minLength: IrisSpacing.md)
 
             clock
+            if let sync {
+                SyncIndicatorView(sync: sync)
+            }
             displayStatus
-            accountMenu
+            AccountMenu(viewModel: account)
         }
         .padding(.horizontal, IrisSpacing.lg)
         .frame(height: 68)
@@ -110,22 +113,5 @@ struct ConsoleTopBar: View {
                     .foregroundStyle(IrisColor.textTertiary)
             }
         }
-    }
-
-    private var accountMenu: some View {
-        Menu {
-            Section(churchName) {
-                Button("Cerrar sesión", systemImage: "rectangle.portrait.and.arrow.right", role: .destructive) {
-                    onSignOut()
-                }
-            }
-        } label: {
-            Text(initials)
-                .font(IrisFont.calloutEmphasized)
-                .foregroundStyle(IrisColor.textInverse)
-                .frame(width: 42, height: 42)
-                .background(IrisGradient.accent, in: Circle())
-        }
-        .accessibilityLabel(Text("Cuenta"))
     }
 }

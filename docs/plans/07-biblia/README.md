@@ -32,4 +32,12 @@ Fase 01 (sesión). Independiente de la sincronización.
 
 ## Desviaciones
 
-_(Completar al cerrar la fase.)_
+- `BibleStore` guarda el `BibleDownload` como `rvr1909-v<version>.json` y, aparte, `rvr1909.meta.json` con versión,
+  `ETag` y nombre; al bajar una versión nueva borra la anterior.
+- El progreso se mide leyendo la respuesta por bytes (`APIClient.sendRaw(_:expectedBytes:progress:)`) contra el
+  `sizeBytes` de `GET /bible/translations`. Si ese tamaño es el del gzip, el porcentaje avanza más rápido de lo real
+  (tope de 99 % hasta guardar).
+- `BibleRepository` gana `availabilityUpdates()` y `prepare()`, con implementación por defecto "lista" para el mock.
+  Abrir el selector antes de que termine la descarga en segundo plano se suma a esa misma descarga.
+- La fecha de la última comprobación se guarda en `SyncState.bibleCheckedAt` de la copia local.
+- La API todavía no tiene el módulo `/bible`: la prueba con Juan 3:16 queda para la fase 10.

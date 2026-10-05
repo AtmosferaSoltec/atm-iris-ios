@@ -14,6 +14,65 @@ struct BiblePickerView: View {
         VStack(alignment: .leading, spacing: IrisSpacing.lg) {
             header
 
+            if viewModel.availability != .ready {
+                availabilityState
+            } else {
+                steps
+            }
+        }
+        .padding(IrisSpacing.xl)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .animation(IrisMotion.smooth, value: viewModel.step)
+        .animation(IrisMotion.smooth, value: viewModel.availability)
+        .presentationSizing(.form)
+        .presentationBackground(IrisColor.canvasElevated)
+        .task { await viewModel.load() }
+    }
+
+    // MARK: Download
+
+    @ViewBuilder
+    private var availabilityState: some View {
+        VStack(spacing: IrisSpacing.lg) {
+            switch viewModel.availability {
+            case let .downloading(progress):
+                ProgressView(value: progress)
+                    .tint(IrisColor.coral)
+                    .frame(maxWidth: 320)
+                Text(viewModel.downloadText)
+                    .font(IrisFont.callout)
+                    .monospacedDigit()
+                    .foregroundStyle(IrisColor.textSecondary)
+            case .needsConnection:
+                downloadProblem(Text("Necesitas conexión para descargar la Biblia la primera vez."))
+            case let .failed(message):
+                downloadProblem(Text(message))
+            case .ready:
+                EmptyView()
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func downloadProblem(_ message: Text) -> some View {
+        VStack(spacing: IrisSpacing.md) {
+            Image(systemName: "icloud.slash")
+                .font(.system(size: 26, weight: .semibold))
+                .foregroundStyle(IrisGradient.accent)
+            message
+                .font(IrisFont.callout)
+                .foregroundStyle(IrisColor.textSecondary)
+                .multilineTextAlignment(.center)
+            Button("Reintentar") { viewModel.retryDownload() }
+                .buttonStyle(.irisGlass)
+                .fixedSize()
+        }
+    }
+
+    // MARK: Steps
+
+    @ViewBuilder
+    private var steps: some View {
             switch viewModel.step {
             case .book:
                 bookStep
@@ -27,13 +86,6 @@ struct BiblePickerView: View {
                 verseStep
                     .transition(.opacity)
             }
-        }
-        .padding(IrisSpacing.xl)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .animation(IrisMotion.smooth, value: viewModel.step)
-        .presentationSizing(.form)
-        .presentationBackground(IrisColor.canvasElevated)
-        .task { await viewModel.load() }
     }
 
     // MARK: Header
@@ -174,6 +226,15 @@ struct BibleNumberCell: View {
 
 #Preview {
     BiblePickerView(viewModel: BiblePickerViewModel(repository: MockBibleRepository()) { _, _, _ in })
+        .frame(width: 620, height: 760)
+        .background(IrisColor.canvasElevated)
+        .preferredColorScheme(.dark)
+}
+
+#Preview("Descargando") {
+    let viewModel = BiblePickerViewModel(repository: MockBibleRepository()) { _, _, _ in }
+    viewModel.apply(availability: .downloading(progress: 0.42))
+    return BiblePickerView(viewModel: viewModel)
         .frame(width: 620, height: 760)
         .background(IrisColor.canvasElevated)
         .preferredColorScheme(.dark)

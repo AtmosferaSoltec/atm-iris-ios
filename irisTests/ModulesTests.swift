@@ -61,7 +61,7 @@ struct ModulesTests {
 
     private func console(modules: ChurchModules) -> LiveConsoleViewModel {
         let viewModel = LiveConsoleViewModel(
-            session: UserSession(id: UUID(), churchName: "Iglesia Vida Nueva", leaderName: "Daniel Ruiz", email: "pastor@vidanueva.org"),
+            session: .preview,
             modules: modules,
             servicePlanRepository: MockServicePlanRepository(latency: .zero),
             backgroundRepository: MockBackgroundRepository(),
@@ -117,7 +117,7 @@ struct ModulesTests {
     @Test func homeHandsItsModulesToTheConsoleAfterRefresh() async throws {
         let store = InMemoryChurchStore()
         let home = HomeViewModel(
-            session: UserSession(id: UUID(), churchName: "Iglesia Vida Nueva", leaderName: "Daniel Ruiz", email: "pastor@vidanueva.org"),
+            session: .preview,
             moduleSettings: MockModuleSettingsRepository(store: store, latency: .zero),
             serviceTypes: MockServiceTypeRepository(store: store, latency: .zero),
             people: MockPeopleRepository(store: store, latency: .zero),

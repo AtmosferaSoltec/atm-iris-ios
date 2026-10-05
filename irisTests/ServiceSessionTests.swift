@@ -30,7 +30,7 @@ struct ServiceSessionTests {
     private func console(serviceType: ServiceType?, modules: ChurchModules = ChurchModules()) -> LiveConsoleViewModel {
         let clock = clock
         return LiveConsoleViewModel(
-            session: UserSession(id: UUID(), churchName: "Iglesia Vida Nueva", leaderName: "Daniel Ruiz", email: "pastor@vidanueva.org"),
+            session: .preview,
             serviceType: serviceType,
             modules: modules,
             people: store.people,

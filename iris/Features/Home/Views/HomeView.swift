@@ -8,18 +8,19 @@ import SwiftUI
 /// Landing screen after sign-in: greeting, start-service hero and module tiles.
 struct HomeView: View {
     let viewModel: HomeViewModel
-    let onSignOut: () -> Void
+    let account: AccountViewModel
 
     var body: some View {
         VStack(spacing: 0) {
             ConsoleTopBar(
                 display: viewModel.display,
-                churchName: viewModel.session.churchName,
-                initials: viewModel.accountInitials,
-                onSignOut: { onSignOut() }
+                account: account,
+                sync: viewModel.syncService
             )
 
-            if viewModel.isLoading {
+            if viewModel.initialSync != .ready {
+                InitialSyncView(state: viewModel.initialSync) { viewModel.retryInitialSync() }
+            } else if viewModel.isLoading {
                 ProgressView()
                     .tint(IrisColor.textSecondary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -42,6 +43,9 @@ struct HomeView: View {
         .background { IrisBackground(isAnimated: false) }
         // Runs each time Home reappears, so changes made on other screens show up.
         .task { await viewModel.appear() }
+        .task { await viewModel.observeChanges() }
+        .task { await viewModel.runPeriodicSync() }
+        .task { await viewModel.observeDisplay() }
     }
 
     // MARK: Greeting
@@ -54,7 +58,7 @@ struct HomeView: View {
                 .textCase(.uppercase)
                 .foregroundStyle(IrisGradient.accent)
 
-            Text("\(viewModel.greeting) \(Text(viewModel.session.churchName).foregroundStyle(IrisGradient.accent))")
+            Text("\(viewModel.greeting) \(Text(viewModel.session.church.name).foregroundStyle(IrisGradient.accent))")
                 .font(.system(size: 44, weight: .medium, design: .serif))
                 .tracking(IrisTracking.tight)
                 .foregroundStyle(IrisColor.textPrimary)
@@ -109,7 +113,7 @@ extension HomeViewModel {
 
     private static func makePreview(store: InMemoryChurchStore) -> HomeViewModel {
         let viewModel = HomeViewModel(
-            session: UserSession(id: UUID(), churchName: "Iglesia Vida Nueva", leaderName: "Daniel Ruiz", email: "pastor@vidanueva.org"),
+            session: .preview,
             moduleSettings: MockModuleSettingsRepository(store: store, latency: .zero),
             serviceTypes: MockServiceTypeRepository(store: store, latency: .zero),
             people: MockPeopleRepository(store: store, latency: .zero),
@@ -131,13 +135,13 @@ extension HomeViewModel {
 }
 
 #Preview("Landscape", traits: .landscapeLeft) {
-    HomeView(viewModel: .preview, onSignOut: {})
+    HomeView(viewModel: .preview, account: .preview())
         .preferredColorScheme(.dark)
         .environment(\.locale, Locale(identifier: "es"))
 }
 
 #Preview("Sin servicios", traits: .landscapeLeft) {
-    HomeView(viewModel: .emptyPreview, onSignOut: {})
+    HomeView(viewModel: .emptyPreview, account: .preview())
         .preferredColorScheme(.dark)
         .environment(\.locale, Locale(identifier: "es"))
 }

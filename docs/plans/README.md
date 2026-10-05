@@ -28,17 +28,17 @@
 
 | # | Fase | Estado |
 |---|---|---|
-| 00 | [Fundamentos](00-fundamentos/README.md): configuración, cliente HTTP, modelos del contrato, Keychain, modo de datos | [ ] |
-| 01 | [Login](01-login/README.md): acceso real, sesión que no vuelve a pedir contraseña, recuperación en 3 pasos | [ ] |
-| 02 | [Sincronización](02-sincronizacion/README.md): copia local (SwiftData), feed de cambios, cola de escrituras, conexión | [ ] |
-| 03 | [Cuenta y permisos](03-cuenta-y-permisos/README.md): cambio de iglesia, cerrar sesión, permisos en cada pantalla | [ ] |
-| 04 | [Iglesia](04-iglesia/README.md): módulos, personas y tipos de servicio sobre la copia local | [ ] |
-| 05 | [Canciones](05-canciones/README.md): biblioteca de letras real | [ ] |
-| 06 | [Multimedia](06-multimedia/README.md): caché de archivos, fondos personalizados, biblioteca real | [ ] |
-| 07 | [Biblia](07-biblia/README.md): RVR1909 completa sin conexión | [ ] |
-| 08 | [Tiempos](08-tiempos/README.md): guardar, ajustar y consultar registros | [ ] |
-| 09 | [TV y reproducción](09-tv-y-reproduccion/README.md): pantalla externa real, audio y video reales | [ ] |
-| 10 | [Calidad y entrega](10-calidad-y-entrega/README.md): pruebas, limpieza, documentación, reporte | [ ] |
+| 00 | [Fundamentos](00-fundamentos/README.md): configuración, cliente HTTP, modelos del contrato, Keychain, modo de datos | [x] |
+| 01 | [Login](01-login/README.md): acceso real, sesión que no vuelve a pedir contraseña, recuperación en 3 pasos | [x] |
+| 02 | [Sincronización](02-sincronizacion/README.md): copia local (SwiftData), feed de cambios, cola de escrituras, conexión | [x] |
+| 03 | [Cuenta y permisos](03-cuenta-y-permisos/README.md): cambio de iglesia, cerrar sesión, permisos en cada pantalla | [x] |
+| 04 | [Iglesia](04-iglesia/README.md): módulos, personas y tipos de servicio sobre la copia local | [x] |
+| 05 | [Canciones](05-canciones/README.md): biblioteca de letras real | [x] |
+| 06 | [Multimedia](06-multimedia/README.md): caché de archivos, fondos personalizados, biblioteca real | [x] |
+| 07 | [Biblia](07-biblia/README.md): RVR1909 completa sin conexión | [x] |
+| 08 | [Tiempos](08-tiempos/README.md): guardar, ajustar y consultar registros | [x] |
+| 09 | [TV y reproducción](09-tv-y-reproduccion/README.md): pantalla externa real, audio y video reales | [x] |
+| 10 | [Calidad y entrega](10-calidad-y-entrega/README.md): pruebas, limpieza, documentación, reporte | [x] |
 
 Marca cada casilla al terminar la fase y completa su sección *Desviaciones*.
 

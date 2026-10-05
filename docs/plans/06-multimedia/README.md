@@ -47,4 +47,13 @@ Fases 02 y 04.
 
 ## Desviaciones
 
-_(Completar al cerrar la fase.)_
+- `ProjectionBackground` gana `imageURL: URL?` (los degradados quedan como colores) en lugar de un `enum Source`: el
+  degradado sirve además de marcador mientras la imagen se decodifica. Los contenidos `.image`/`.video`/`.audio` de
+  `Slide` y `ProjectionFrame` ganan `url: URL? = nil` (sin URL, las vistas previas siguen con marcadores).
+- Las descargas usan una `URLSession` de background con delegado (`MediaDownloader`, más `IrisAppDelegate` para los
+  eventos al relanzar). El progreso se publica en pasos de 10 % para no redibujar en cada fragmento.
+- Las miniaturas de video (primer cuadro a 0,5 s) se guardan en `Caches/VideoThumbnails`, regenerables.
+- El espacio libre se comprueba antes de cada video; con menos de 1 GB se omite y el indicador de sincronización avisa.
+- Las descargas arrancan desde un `afterSync` del motor de sincronización, sin bloquearlo, y solo con el módulo
+  Multimedia encendido. Cerrar sesión borra la caché.
+- La música en descarga también aparece deshabilitada con "Descargando…" (la regla de la spec habla de celdas).

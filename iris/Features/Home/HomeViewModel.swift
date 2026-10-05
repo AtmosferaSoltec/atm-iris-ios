@@ -26,7 +26,7 @@ final class HomeViewModel {
     private(set) var display: ExternalDisplay?
     var selectedServiceTypeID: ServiceType.ID?
 
-    let session: UserSession
+    let context: SessionContext
     private let now: () -> Date
 
     // MARK: Dependencies
@@ -37,20 +37,30 @@ final class HomeViewModel {
     private let timeRecords: any TimeRecordRepository
     private let libraryRepository: any LibraryRepository
     private let displayOutput: any DisplayOutputService
+    private let sync: any SyncService
+    /// Reloads name, role and permissions (`GET /auth/me`).
+    private let reloadSession: () async -> Void
     private let onNavigate: (SignedInNavigator.Route) -> Void
 
+    /// Sync interval while Home is visible (contract §12).
+    static let periodicSyncInterval: Duration = .seconds(300)
+
     init(
-        session: UserSession,
+        session: SessionContext,
         moduleSettings: any ModuleSettingsRepository,
         serviceTypes: any ServiceTypeRepository,
         people: any PeopleRepository,
         timeRecords: any TimeRecordRepository,
         libraryRepository: any LibraryRepository,
         displayOutput: any DisplayOutputService,
+        sync: any SyncService = MockSyncService(),
+        reloadSession: @escaping () async -> Void = {},
         now: @escaping () -> Date = { .now },
         onNavigate: @escaping (SignedInNavigator.Route) -> Void
     ) {
-        self.session = session
+        context = session
+        self.sync = sync
+        self.reloadSession = reloadSession
         self.moduleSettings = moduleSettings
         self.serviceTypeRepository = serviceTypes
         self.peopleRepository = people
@@ -61,10 +71,17 @@ final class HomeViewModel {
         self.onNavigate = onNavigate
     }
 
+    var session: UserSession { context.session }
+
+    /// First download of the church on this iPad.
+    var initialSync: InitialSyncState { sync.initialSync }
+
+    var syncService: any SyncService { sync }
+
     // MARK: Greeting
 
     var greeting: String {
-        switch Calendar.current.component(.hour, from: now()) {
+        switch session.calendar.component(.hour, from: now()) {
         case 5..<12: String(localized: "Buenos días,")
         case 12..<19: String(localized: "Buenas tardes,")
         default: String(localized: "Buenas noches,")
@@ -72,20 +89,14 @@ final class HomeViewModel {
     }
 
     var todayText: String {
-        now().formatted(.dateTime.weekday(.wide).day().month(.wide).locale(Locale(identifier: "es")))
+        now().formatted(
+            Date.FormatStyle(locale: Locale(identifier: "es"), calendar: session.calendar, timeZone: session.church.timeZone)
+                .weekday(.wide).day().month(.wide)
+        )
     }
 
     /// Initials of the first two words longer than two letters of the church name.
-    var accountInitials: String {
-        session.churchName
-            .split(separator: " ")
-            .filter { $0.count > 2 }
-            .prefix(2)
-            .compactMap(\.first)
-            .map(String.init)
-            .joined()
-            .uppercased()
-    }
+    var accountInitials: String { session.churchInitials }
 
     // MARK: Hero
 
@@ -98,7 +109,7 @@ final class HomeViewModel {
 
     /// Whether the selected type is scheduled for today.
     var isSelectedToday: Bool {
-        selectedServiceType?.schedule?.weekday == Calendar.current.component(.weekday, from: now())
+        selectedServiceType?.schedule?.weekday == session.calendar.component(.weekday, from: now())
     }
 
     var selectedScheduleText: String? {
@@ -138,7 +149,43 @@ final class HomeViewModel {
             await load()
         } else {
             await refresh()
+            // Back on Home: catch up with the web, roles included.
+            await sync.syncNow(reason: .returnedHome)
+            await reloadSession()
         }
+    }
+
+    /// Syncs every few minutes while Home is visible, until the calling task is cancelled.
+    func runPeriodicSync() async {
+        while !Task.isCancelled {
+            try? await Task.sleep(for: Self.periodicSyncInterval)
+            guard !Task.isCancelled else { return }
+            await sync.syncNow(reason: .periodic)
+        }
+    }
+
+    /// Reloads silently whenever the local copy changes, until the calling task is cancelled.
+    func observeChanges() async {
+        let streams = [
+            moduleSettings.changes(), serviceTypeRepository.changes(), peopleRepository.changes(),
+            timeRecords.changes(), libraryRepository.changes()
+        ]
+        for await _ in AsyncStream.merged(streams) {
+            if isLoading { continue }
+            await refresh()
+            await refreshLibrary()
+        }
+    }
+
+    /// Follows the TV connecting and disconnecting, until the calling task is cancelled.
+    func observeDisplay() async {
+        for await display in displayOutput.displayUpdates() {
+            self.display = display
+        }
+    }
+
+    func retryInitialSync() {
+        Task { await sync.syncNow(reason: .manual) }
     }
 
     func load() async {
@@ -175,6 +222,15 @@ final class HomeViewModel {
         if selectedServiceType == nil {
             selectedServiceTypeID = suggestedServiceType(in: serviceTypes)?.id
         }
+    }
+
+    private func refreshLibrary() async {
+        library = LibraryCounts(
+            lyrics: (try? await libraryRepository.lyrics().count) ?? library.lyrics,
+            music: (try? await libraryRepository.media(of: .music).count) ?? library.music,
+            images: (try? await libraryRepository.media(of: .image).count) ?? library.images,
+            videos: (try? await libraryRepository.media(of: .video).count) ?? library.videos
+        )
     }
 
     /// Installs loaded data. Also used by previews to start loaded.
@@ -228,7 +284,7 @@ final class HomeViewModel {
 
     /// Today's next scheduled service, else the first type.
     private func suggestedServiceType(in types: [ServiceType]) -> ServiceType? {
-        let calendar = Calendar.current
+        let calendar = session.calendar
         let weekday = calendar.component(.weekday, from: now())
         let minutesNow = calendar.component(.hour, from: now()) * 60 + calendar.component(.minute, from: now())
         let today = types

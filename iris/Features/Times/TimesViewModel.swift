@@ -63,6 +63,7 @@ final class TimesViewModel {
     private let peopleRepository: any PeopleRepository
     private let now: () -> Date
     private let calendar: Calendar
+    private let context: SessionContext
     private var saveTask: Task<Void, Never>?
 
     private static let spanish = Locale(identifier: "es")
@@ -71,9 +72,13 @@ final class TimesViewModel {
         timeRecords: any TimeRecordRepository,
         serviceTypes: any ServiceTypeRepository,
         people: any PeopleRepository,
+        session: SessionContext = .preview,
         now: @escaping () -> Date = { .now },
-        calendar: Calendar = .current
+        calendar: Calendar? = nil
     ) {
+        context = session
+        // Months and "today" follow the church's time zone, not the iPad's.
+        let calendar = calendar ?? session.session.calendar
         self.timeRecords = timeRecords
         serviceTypeRepository = serviceTypes
         peopleRepository = people
@@ -94,6 +99,23 @@ final class TimesViewModel {
         apply(records: records, serviceTypes: types, people: people)
     }
 
+    /// Adjusting, changing leaders and deleting need `records.manage`.
+    var canManage: Bool { context.can(.recordsManage) }
+
+    /// Reloads silently when a sync brings records from other consoles, until the calling task is cancelled.
+    func observeChanges() async {
+        let streams = [timeRecords.changes(), serviceTypeRepository.changes(), peopleRepository.changes()]
+        for await _ in AsyncStream.merged(streams) {
+            guard !isLoading else { continue }
+            let selection = selectedRecordID
+            let records = (try? await timeRecords.records()) ?? self.records
+            let types = (try? await serviceTypeRepository.serviceTypes()) ?? serviceTypes
+            let people = (try? await peopleRepository.people()) ?? self.people
+            apply(records: records, serviceTypes: types, people: people)
+            if let selection, records.contains(where: { $0.id == selection }) { selectedRecordID = selection }
+        }
+    }
+
     /// Installs loaded data. Also used by previews to start loaded.
     func apply(records: [ServiceRecord], serviceTypes: [ServiceType], people: [Person]) {
         self.records = records.sorted { $0.date > $1.date }
@@ -106,7 +128,9 @@ final class TimesViewModel {
     // MARK: Shared texts
 
     func serviceName(_ id: ServiceType.ID) -> String {
-        serviceTypes.first { $0.id == id }?.name ?? String(localized: "Servicio eliminado")
+        serviceTypes.first { $0.id == id }?.name
+            ?? records.first { $0.serviceTypeID == id }?.serviceTypeName.flatMap { $0.isEmpty ? nil : $0 }
+            ?? String(localized: "Servicio eliminado")
     }
 
     /// `nil` when the service type was deleted.
@@ -207,6 +231,8 @@ final class TimesViewModel {
         await updateBlock(blockID, in: recordID) { block in
             block.actualSeconds = max(0, seconds)
             block.status = .adjusted
+        } persist: { repository in
+            try await repository.adjust(recordID, block: blockID, actualSeconds: max(0, seconds))
         }
     }
 
@@ -216,6 +242,8 @@ final class TimesViewModel {
         await updateBlock(blockID, in: recordID) { block in
             block.personID = personID
             block.personName = name
+        } persist: { repository in
+            try await repository.changeLeader(recordID, block: blockID, to: personID)
         }
     }
 
@@ -376,16 +404,20 @@ final class TimesViewModel {
     }
 
     /// Changes one block locally right away, then saves; saves run in order.
-    private func updateBlock(_ blockID: BlockRecord.ID, in recordID: ServiceRecord.ID, change: (inout BlockRecord) -> Void) async {
+    private func updateBlock(
+        _ blockID: BlockRecord.ID,
+        in recordID: ServiceRecord.ID,
+        change: (inout BlockRecord) -> Void,
+        persist: @escaping (any TimeRecordRepository) async throws -> Void
+    ) async {
         guard let recordIndex = records.firstIndex(where: { $0.id == recordID }),
               let blockIndex = records[recordIndex].blocks.firstIndex(where: { $0.id == blockID }) else { return }
         change(&records[recordIndex].blocks[blockIndex])
-        let record = records[recordIndex]
         let previous = saveTask
         let task = Task { [timeRecords] in
             await previous?.value
             do {
-                try await timeRecords.save(record)
+                try await persist(timeRecords)
             } catch {
                 self.errorMessage = String(localized: "Algo salió mal. Inténtalo de nuevo.")
             }

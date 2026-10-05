@@ -27,10 +27,15 @@ final class ModulesViewModel {
     private(set) var saveTask: Task<Void, Never>?
 
     private let repository: any ModuleSettingsRepository
+    private let context: SessionContext
 
-    init(moduleSettings: any ModuleSettingsRepository) {
+    init(moduleSettings: any ModuleSettingsRepository, session: SessionContext = .preview) {
         repository = moduleSettings
+        context = session
     }
+
+    /// Only roles with `modules.manage` can flip the switches; the rest see them disabled.
+    var canManage: Bool { context.can(.modulesManage) }
 
     // MARK: Derived
 
@@ -47,6 +52,15 @@ final class ModulesViewModel {
     var showsTimeControlNote: Bool { !modules.timeControl }
 
     // MARK: Intents
+
+    /// Follows changes from a sync while the screen is open, until the calling task is cancelled.
+    func observeChanges() async {
+        for await _ in repository.changes() {
+            if let modules = try? await repository.modules(), saveTask == nil || modules == self.modules {
+                self.modules = modules
+            }
+        }
+    }
 
     func load() async {
         guard isLoading else { return }
@@ -66,7 +80,7 @@ final class ModulesViewModel {
 
     /// Updates the switch immediately and saves in the background; a failed save puts it back.
     func setModule(_ module: Module, isOn: Bool) {
-        guard !module.isAlwaysOn, self.isOn(module) != isOn else { return }
+        guard canManage, !module.isAlwaysOn, self.isOn(module) != isOn else { return }
         let previous = modules
         switch module {
         case .lyrics: break

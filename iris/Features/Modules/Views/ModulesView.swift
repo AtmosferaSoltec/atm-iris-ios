@@ -27,7 +27,11 @@ struct ModulesView: View {
                             if let errorMessage = viewModel.errorMessage {
                                 IrisBanner(style: .error, message: errorMessage)
                             }
+                            if !viewModel.canManage {
+                                IrisBanner(style: .info, message: String(localized: "Solo un administrador puede cambiar los módulos."))
+                            }
                             moduleList
+                                .disabled(!viewModel.canManage)
                         }
                     }
                     .frame(maxWidth: IrisSize.settingsColumnWidth)
@@ -40,6 +44,7 @@ struct ModulesView: View {
             }
         }
         .task { await viewModel.load() }
+        .task { await viewModel.observeChanges() }
     }
 
     private var header: some View {
@@ -164,10 +169,13 @@ extension ModulesViewModel {
         makePreview(ChurchModules(bible: true, multimedia: false, timeControl: false))
     }
 
-    private static func makePreview(_ modules: ChurchModules) -> ModulesViewModel {
+    /// An operator sees the switches without being able to change them.
+    static var operatorPreview: ModulesViewModel { makePreview(ChurchModules(), role: .operator) }
+
+    private static func makePreview(_ modules: ChurchModules, role: UserSession.Role = .owner) -> ModulesViewModel {
         let store = InMemoryChurchStore()
         store.modules = modules
-        let viewModel = ModulesViewModel(moduleSettings: MockModuleSettingsRepository(store: store, latency: .zero))
+        let viewModel = ModulesViewModel(moduleSettings: MockModuleSettingsRepository(store: store, latency: .zero), session: .preview(role: role))
         viewModel.apply(modules: modules)
         return viewModel
     }
@@ -182,6 +190,13 @@ extension ModulesViewModel {
 
 #Preview("Sin control de tiempo", traits: .landscapeLeft) {
     ModulesView(viewModel: .partialPreview)
+        .background { IrisBackground(isAnimated: false) }
+        .preferredColorScheme(.dark)
+        .environment(\.locale, Locale(identifier: "es"))
+}
+
+#Preview("Operador", traits: .landscapeLeft) {
+    ModulesView(viewModel: .operatorPreview)
         .background { IrisBackground(isAnimated: false) }
         .preferredColorScheme(.dark)
         .environment(\.locale, Locale(identifier: "es"))

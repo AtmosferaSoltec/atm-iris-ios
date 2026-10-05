@@ -57,7 +57,7 @@ struct ProjectionPreview: View {
 }
 
 #Preview {
-    ProjectionPreview(item: MockShowcaseContentProvider().items()[1])
+    ProjectionPreview(item: StaticShowcaseContentProvider().items()[1])
         .frame(width: 440)
         .padding(64)
         .background(IrisColor.canvas)

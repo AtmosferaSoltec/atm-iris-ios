@@ -36,4 +36,12 @@ Fases 02, 03 y 04.
 
 ## Desviaciones
 
-_(Completar al cerrar la fase.)_
+- `TimeRecordRepository` gana `adjust(_:block:actualSeconds:)`, `changeLeader(_:block:to:)` (ambos `PATCH`) e
+  `isPendingUpload(_:)`. Tiempos ya no reescribe el registro completo para un ajuste.
+- La cola se envía **también durante un servicio** (solo la descarga de cambios espera a que se cierre la consola),
+  para que el registro de un servicio terminado llegue sin salir de la consola. El estado "Terminado" consulta cada
+  5 s si sigue pendiente y muestra "Se enviará cuando haya conexión" en ámbar mientras lo esté.
+- El id del registro se genera una sola vez al terminar (`finishedRecord`); "Reintentar" reutiliza ese mismo registro.
+- `TimesViewModel` toma el `Calendar` de la iglesia desde la sesión (zona de `session.church.timezone`).
+- El nombre de un tipo borrado sale de `serviceTypeName` del registro; si no lo hay, "Servicio eliminado".
+- `/service-records` aún no está en la API: la prueba de punta a punta queda para la fase 10.

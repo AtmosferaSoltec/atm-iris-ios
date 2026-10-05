@@ -6,7 +6,7 @@
 import Foundation
 
 /// Consistent duration strings across the app.
-enum IrisDurationFormat {
+nonisolated enum IrisDurationFormat {
     /// "9:40", "1:32:10".
     static func clock(_ seconds: TimeInterval) -> String {
         let duration = Duration.seconds(max(0, seconds.rounded()))

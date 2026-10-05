@@ -19,15 +19,31 @@ final class ServiceTypesViewModel {
     private let serviceTypeRepository: any ServiceTypeRepository
     private let peopleRepository: any PeopleRepository
     private let moduleSettings: any ModuleSettingsRepository
+    private let context: SessionContext
 
     init(
         serviceTypes: any ServiceTypeRepository,
         people: any PeopleRepository,
-        moduleSettings: any ModuleSettingsRepository
+        moduleSettings: any ModuleSettingsRepository,
+        session: SessionContext = .preview
     ) {
         serviceTypeRepository = serviceTypes
         peopleRepository = people
         self.moduleSettings = moduleSettings
+        context = session
+    }
+
+    /// Without `serviceTypes.manage` there is no "Nuevo servicio" and the editor opens read-only.
+    var canManage: Bool { context.can(.serviceTypesManage) }
+
+    /// Reloads silently when a sync changes the types or the modules, until the calling task is cancelled.
+    func observeChanges() async {
+        for await _ in AsyncStream.merged([serviceTypeRepository.changes(), moduleSettings.changes()]) {
+            guard !isLoading else { continue }
+            let modules = (try? await moduleSettings.modules()) ?? self.modules
+            let types = (try? await serviceTypeRepository.serviceTypes()) ?? serviceTypes
+            apply(serviceTypes: types, modules: modules)
+        }
     }
 
     // MARK: Derived
@@ -67,6 +83,7 @@ final class ServiceTypesViewModel {
     // MARK: Intents
 
     func createServiceType() {
+        guard canManage else { return }
         presentEditor(for: nil)
     }
 
@@ -81,6 +98,7 @@ final class ServiceTypesViewModel {
             editing: type,
             otherTypes: serviceTypes,
             showsTimeControl: modules.timeControl,
+            isReadOnly: !canManage,
             serviceTypes: serviceTypeRepository,
             people: peopleRepository,
             onFinish: { [weak self] outcome in

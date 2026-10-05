@@ -28,4 +28,7 @@ Fase 02.
 
 ## Desviaciones
 
-_(Completar al cerrar la fase.)_
+- `LyricSheet` usa el id de cada sección como id de su `Slide`, para que una canción proyectada conserve identidad.
+- Además de la búsqueda local en el texto de las secciones, "Agregar al servicio" se recarga en silencio si una
+  sincronización trae canciones nuevas mientras está abierto.
+- `/sync/changes` aún no existe en la API: la verificación con canciones de la web queda para la fase 10.

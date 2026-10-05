@@ -31,10 +31,25 @@ final class PeopleViewModel {
 
     private let peopleRepository: any PeopleRepository
     private let timeRecords: any TimeRecordRepository
+    private let context: SessionContext
 
-    init(people: any PeopleRepository, timeRecords: any TimeRecordRepository) {
+    init(people: any PeopleRepository, timeRecords: any TimeRecordRepository, session: SessionContext = .preview) {
         peopleRepository = people
         self.timeRecords = timeRecords
+        context = session
+    }
+
+    /// Adding, renaming and deleting need `people.manage` (every role has it today).
+    var canManage: Bool { context.can(.peopleManage) }
+
+    /// Reloads silently when a sync changes people or records, until the calling task is cancelled.
+    func observeChanges() async {
+        for await _ in AsyncStream.merged([peopleRepository.changes(), timeRecords.changes()]) {
+            guard !isLoading else { continue }
+            let people = (try? await peopleRepository.people()) ?? self.people
+            let records = (try? await timeRecords.records()) ?? []
+            apply(people: people, records: records)
+        }
     }
 
     // MARK: Derived
@@ -92,7 +107,7 @@ final class PeopleViewModel {
             newName = ""
             errorMessage = nil
         } catch {
-            newNameError = String(localized: "Algo salió mal. Inténtalo de nuevo.")
+            newNameError = Self.message(for: error)
         }
     }
 
@@ -117,7 +132,7 @@ final class PeopleViewModel {
             people = Self.sorted(people.map { $0.id == person.id ? Person(id: $0.id, name: name) : $0 })
             errorMessage = nil
         } catch {
-            errorMessage = String(localized: "Algo salió mal. Inténtalo de nuevo.")
+            errorMessage = Self.message(for: error)
         }
     }
 
@@ -135,7 +150,7 @@ final class PeopleViewModel {
             try await peopleRepository.delete(person.id)
             people.removeAll { $0.id == person.id }
         } catch {
-            errorMessage = String(localized: "Algo salió mal. Inténtalo de nuevo.")
+            errorMessage = Self.message(for: error)
         }
     }
 
@@ -149,6 +164,10 @@ final class PeopleViewModel {
             return String(localized: "Ya existe una persona con ese nombre.")
         }
         return nil
+    }
+
+    private static func message(for error: any Error) -> String {
+        (error as? LocalizedError)?.errorDescription ?? String(localized: "Algo salió mal. Inténtalo de nuevo.")
     }
 
     private static func sorted(_ people: [Person]) -> [Person] {

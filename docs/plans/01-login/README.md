@@ -59,4 +59,12 @@ Emblema e indicador "Paso N de 3" como la web (`../atm-iris-web/src/features/aut
 
 ## Desviaciones
 
-_(Completar al cerrar la fase.)_
+- `AuthService` expone `restoreSession()` (lee lo guardado, sin red), `resumeSession()` (refresca en segundo plano),
+  `sessionEvents()` y `reloadSession()` (`GET /auth/me`, fase 03) en lugar de un único `currentSession()`.
+- Hay **dos** `APIClient`: uno sin tokens (públicos y `refresh`, lo usa `AuthSessionManager`) y otro con tokens para el
+  resto. Así el gestor de sesión no depende del cliente que él mismo alimenta.
+- `session.json` se escribe con protección `completeUntilFirstUserAuthentication`, igual que el ítem del Keychain.
+- El paso 2 de la recuperación agrega el enlace "Cambiar correo" (vuelve al paso 1) junto a "Reenviar código".
+- `AuthError` conserva solo `.api(code:message:fieldErrors:)` y `.network`; los textos vienen del API.
+- Verificación: `POST /auth/sign-in` con la cuenta de desarrollo responde exactamente el `AuthResult` del contrato
+  (comprobado con `curl`). El recorrido completo en el simulador queda para la fase 10.

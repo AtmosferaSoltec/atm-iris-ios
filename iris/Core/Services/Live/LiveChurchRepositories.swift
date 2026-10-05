@@ -1,0 +1,139 @@
+//
+//  LiveChurchRepositories.swift
+//  iris
+//
+//  Church settings over the local copy (contract §6, §8, §9, §14).
+//
+
+import Foundation
+
+struct LiveModuleSettingsRepository: ModuleSettingsRepository {
+    let data: LiveChurchData
+
+    func changes() -> AsyncStream<Void> { data.changes(of: [.church]) }
+
+    func modules() async throws -> ChurchModules {
+        await church().map { ChurchModules($0.modules) } ?? ChurchModules()
+    }
+
+    func save(_ modules: ChurchModules) async throws {
+        if let church = await church() {
+            let updated = ChurchDTO(
+                id: church.id, name: church.name, timezone: church.timezone, modules: modules.dto,
+                storage: church.storage, createdAt: church.createdAt, updatedAt: data.now()
+            )
+            try await data.store.upsert(.church, [(updated.id, updated.name.nameKey, updated)])
+        }
+        try await data.write(
+            APIRequest(.put, "/church/modules", body: modules.dto),
+            kind: .church, label: String(localized: "Módulos"), touching: [.church]
+        )
+    }
+
+    private func church() async -> ChurchDTO? {
+        await data.store.all(.church, as: ChurchDTO.self).first
+    }
+}
+
+struct LivePeopleRepository: PeopleRepository {
+    let data: LiveChurchData
+
+    func changes() -> AsyncStream<Void> { data.changes(of: [.people]) }
+
+    func people() async throws -> [Person] {
+        await data.store.all(.people, as: PersonDTO.self).compactMap { try? Person($0) }
+    }
+
+    /// Created with the console's own id, so a retry from the outbox never duplicates it.
+    func add(name: String) async throws -> Person {
+        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let existing = await data.store.all(.people, as: PersonDTO.self)
+        if existing.contains(where: { $0.name.nameKey == name.nameKey }) {
+            throw LocalWriteError(message: String(localized: "Ya existe una persona con ese nombre."))
+        }
+        let person = Person(name: name)
+        let now = data.now()
+        let dto = PersonDTO(id: person.id.apiString, name: name, blockCount: 0, createdAt: now, updatedAt: now)
+        try await data.store.upsert(.people, [(dto.id, name.nameKey, dto)])
+        try await data.write(
+            APIRequest(.post, "/people", body: PersonCreateBody(id: dto.id, name: name)),
+            kind: .people, label: name, touching: [.people]
+        )
+        return person
+    }
+
+    func rename(_ id: Person.ID, to name: String) async throws {
+        guard let current = await data.store.one(.people, id: id.apiString, as: PersonDTO.self) else { return }
+        let dto = PersonDTO(id: current.id, name: name, blockCount: current.blockCount, createdAt: current.createdAt, updatedAt: data.now())
+        try await data.store.upsert(.people, [(dto.id, name.nameKey, dto)])
+        try await data.write(
+            APIRequest(.patch, "/people/\(dto.id)", body: PersonRenameBody(name: name)),
+            kind: .people, label: name, touching: [.people]
+        )
+    }
+
+    /// Records keep the person's id and name; templates forget them as suggested leader (as the API does).
+    func delete(_ id: Person.ID) async throws {
+        let personID = id.apiString
+        let name = await data.store.one(.people, id: personID, as: PersonDTO.self)?.name ?? ""
+        try await data.store.delete(.people, ids: [personID])
+
+        let types = await data.store.all(.serviceTypes, as: ServiceTypeDTO.self)
+        let updated = types.compactMap { type -> ServiceTypeDTO? in
+            guard type.blocks.contains(where: { $0.defaultPersonId?.lowercased() == personID }) else { return nil }
+            return ServiceTypeDTO(
+                id: type.id, name: type.name, color: type.color, schedule: type.schedule,
+                blocks: type.blocks.map { block in
+                    block.defaultPersonId?.lowercased() == personID
+                        ? BlockTemplateDTO(id: block.id, name: block.name, plannedMinutes: block.plannedMinutes, defaultPersonId: nil)
+                        : block
+                },
+                createdAt: type.createdAt, updatedAt: data.now()
+            )
+        }
+        if !updated.isEmpty {
+            try await data.store.upsert(.serviceTypes, updated.map { ($0.id, $0.name.nameKey, $0) })
+        }
+        try await data.write(
+            APIRequest(.delete, "/people/\(personID)"),
+            kind: .people, label: name, touching: [.people, .serviceTypes]
+        )
+    }
+}
+
+struct LiveServiceTypeRepository: ServiceTypeRepository {
+    let data: LiveChurchData
+
+    func changes() -> AsyncStream<Void> { data.changes(of: [.serviceTypes]) }
+
+    func serviceTypes() async throws -> [ServiceType] {
+        await data.store.all(.serviceTypes, as: ServiceTypeDTO.self).compactMap { try? ServiceType($0) }
+    }
+
+    /// `PUT` creates or replaces, so creating and editing are the same idempotent write.
+    func save(_ type: ServiceType) async throws {
+        let id = type.id.apiString
+        let input = type.inputDTO
+        let now = data.now()
+        let createdAt = await data.store.one(.serviceTypes, id: id, as: ServiceTypeDTO.self)?.createdAt ?? now
+        let dto = ServiceTypeDTO(
+            id: id, name: input.name, color: input.color, schedule: input.schedule, blocks: input.blocks,
+            createdAt: createdAt, updatedAt: now
+        )
+        try await data.store.upsert(.serviceTypes, [(id, type.name.nameKey, dto)])
+        try await data.write(
+            APIRequest(.put, "/service-types/\(id)", body: input),
+            kind: .serviceTypes, label: type.name, touching: [.serviceTypes]
+        )
+    }
+
+    func delete(_ id: ServiceType.ID) async throws {
+        let typeID = id.apiString
+        let name = await data.store.one(.serviceTypes, id: typeID, as: ServiceTypeDTO.self)?.name ?? ""
+        try await data.store.delete(.serviceTypes, ids: [typeID])
+        try await data.write(
+            APIRequest(.delete, "/service-types/\(typeID)"),
+            kind: .serviceTypes, label: name, touching: [.serviceTypes]
+        )
+    }
+}

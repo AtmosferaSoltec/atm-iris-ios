@@ -35,6 +35,7 @@ struct TimesView: View {
             }
         }
         .task { await viewModel.load() }
+        .task { await viewModel.observeChanges() }
     }
 
     private var header: some View {
@@ -223,11 +224,12 @@ extension TimesViewModel {
     /// No records yet.
     static var emptyPreview: TimesViewModel { makePreview(store: InMemoryChurchStore(seed: .empty)) }
 
-    static func makePreview(store: InMemoryChurchStore) -> TimesViewModel {
+    static func makePreview(store: InMemoryChurchStore, role: UserSession.Role = .owner) -> TimesViewModel {
         let viewModel = TimesViewModel(
             timeRecords: MockTimeRecordRepository(store: store, latency: .zero),
             serviceTypes: MockServiceTypeRepository(store: store, latency: .zero),
-            people: MockPeopleRepository(store: store, latency: .zero)
+            people: MockPeopleRepository(store: store, latency: .zero),
+            session: .preview(role: role)
         )
         viewModel.apply(records: store.records, serviceTypes: store.serviceTypes, people: store.people)
         return viewModel
@@ -252,6 +254,13 @@ extension TimesViewModel {
 
 #Preview("Vacío", traits: .landscapeLeft) {
     TimesView(viewModel: .emptyPreview)
+        .background { IrisBackground(isAnimated: false) }
+        .preferredColorScheme(.dark)
+        .environment(\.locale, Locale(identifier: "es"))
+}
+
+#Preview("Operador", traits: .landscapeLeft) {
+    TimesView(viewModel: .makePreview(store: InMemoryChurchStore(), role: .operator))
         .background { IrisBackground(isAnimated: false) }
         .preferredColorScheme(.dark)
         .environment(\.locale, Locale(identifier: "es"))

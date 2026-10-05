@@ -197,7 +197,8 @@ nonisolated struct BlockTimer: Equatable, Sendable {
     // MARK: Results
 
     /// Skipped and never-reached blocks are saved with status `.skipped` and no time.
-    func record(serviceTypeID: ServiceType.ID, date: Date, peopleNames: [Person.ID: String]) -> ServiceRecord {
+    /// `serviceTypeName` is kept with the record so it stays readable if the type is deleted.
+    func record(serviceTypeID: ServiceType.ID, serviceTypeName: String? = nil, date: Date, peopleNames: [Person.ID: String]) -> ServiceRecord {
         let records = blocks.map { block in
             let ran = block.startedAt != nil && !block.isSkipped
             let personID = ran ? block.personID : nil
@@ -210,7 +211,7 @@ nonisolated struct BlockTimer: Equatable, Sendable {
                 status: ran ? .completed : .skipped
             )
         }
-        return ServiceRecord(date: date, serviceTypeID: serviceTypeID, blocks: records)
+        return ServiceRecord(date: date, serviceTypeID: serviceTypeID, serviceTypeName: serviceTypeName, blocks: records)
     }
 
     /// Today's order, names and minutes, without the skipped blocks. Template leaders are kept;

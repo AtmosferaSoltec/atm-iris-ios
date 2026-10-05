@@ -27,7 +27,9 @@ struct PeopleView: View {
                     IrisSurface {
                         VStack(alignment: .leading, spacing: IrisSpacing.lg) {
                             header
-                            addRow
+                            if viewModel.canManage {
+                                addRow
+                            }
                             if let errorMessage = viewModel.errorMessage {
                                 IrisBanner(style: .error, message: errorMessage)
                             }
@@ -45,6 +47,7 @@ struct PeopleView: View {
             }
         }
         .task { await viewModel.load() }
+        .task { await viewModel.observeChanges() }
         .alert("Renombrar", isPresented: $viewModel.isRenaming, presenting: viewModel.renameTarget) { person in
             TextField("Nombre y apellido", text: $viewModel.renameDraft)
                 .textInputAutocapitalization(.words)
@@ -117,19 +120,23 @@ struct PeopleView: View {
             blockCount: viewModel.blockCountText(for: person)
         )
             .swipeActions(edge: .trailing) {
-                Button(role: .destructive) {
-                    viewModel.requestDelete(person)
-                } label: {
-                    Label("Eliminar", systemImage: "trash")
+                if viewModel.canManage {
+                    Button(role: .destructive) {
+                        viewModel.requestDelete(person)
+                    } label: {
+                        Label("Eliminar", systemImage: "trash")
+                    }
                 }
             }
             .contextMenu {
-                Button("Renombrar", systemImage: "pencil") {
-                    viewModel.beginRename(person)
-                }
-                Divider()
-                Button("Eliminar", systemImage: "trash", role: .destructive) {
-                    viewModel.requestDelete(person)
+                if viewModel.canManage {
+                    Button("Renombrar", systemImage: "pencil") {
+                        viewModel.beginRename(person)
+                    }
+                    Divider()
+                    Button("Eliminar", systemImage: "trash", role: .destructive) {
+                        viewModel.requestDelete(person)
+                    }
                 }
             }
             .confirmationDialog(
