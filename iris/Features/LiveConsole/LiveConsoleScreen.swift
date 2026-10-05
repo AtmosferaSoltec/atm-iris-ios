@@ -1,0 +1,50 @@
+//
+//  LiveConsoleScreen.swift
+//  iris
+//
+
+import SwiftUI
+
+/// Owns the console view model for the lifetime of a signed-in session.
+struct LiveConsoleScreen: View {
+    @State private var viewModel: LiveConsoleViewModel
+    private let onExit: () -> Void
+    private let onOpenTimes: () -> Void
+    private let onSignOut: () -> Void
+
+    init(
+        session: UserSession,
+        serviceType: ServiceType?,
+        modules: ChurchModules,
+        people: [Person],
+        dependencies: AppDependencies,
+        onExit: @escaping () -> Void,
+        onOpenTimes: @escaping () -> Void,
+        onSignOut: @escaping () -> Void
+    ) {
+        _viewModel = State(
+            initialValue: LiveConsoleViewModel(
+                session: session,
+                serviceType: serviceType,
+                modules: modules,
+                people: people,
+                servicePlanRepository: dependencies.servicePlanRepository,
+                backgroundRepository: dependencies.backgroundRepository,
+                bibleRepository: dependencies.bibleRepository,
+                libraryRepository: dependencies.libraryRepository,
+                mediaPlayback: dependencies.mediaPlayback,
+                displayOutput: dependencies.displayOutput,
+                serviceTypes: dependencies.serviceTypes,
+                peopleRepository: dependencies.people,
+                timeRecords: dependencies.timeRecords
+            )
+        )
+        self.onExit = onExit
+        self.onOpenTimes = onOpenTimes
+        self.onSignOut = onSignOut
+    }
+
+    var body: some View {
+        LiveConsoleView(viewModel: viewModel, onExit: onExit, onOpenTimes: onOpenTimes, onSignOut: onSignOut)
+    }
+}
