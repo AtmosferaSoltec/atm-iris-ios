@@ -200,7 +200,7 @@ final class HomeViewModel {
         let recordCount = (try? await timeRecords.records().count) ?? 0
         let library = LibraryCounts(
             lyrics: (try? await libraryRepository.lyrics().count) ?? 0,
-            music: await libraryRepository.localMusic().count,
+            music: await libraryRepository.music().count,
             media: await libraryRepository.uploadedMedia().count
         )
         let display = await displayOutput.connectedDisplay()
@@ -231,7 +231,7 @@ final class HomeViewModel {
     private func refreshLibrary() async {
         library = LibraryCounts(
             lyrics: (try? await libraryRepository.lyrics().count) ?? library.lyrics,
-            music: await libraryRepository.localMusic().count,
+            music: await libraryRepository.music().count,
             media: await libraryRepository.uploadedMedia().count
         )
     }

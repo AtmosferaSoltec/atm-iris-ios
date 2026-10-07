@@ -25,13 +25,17 @@ nonisolated struct ServiceItem: Identifiable, Equatable, Sendable {
     /// Author, reference or short description.
     var subtitle: String
     var slides: [Slide]
+    /// The library file behind music, image and video items, so the console can follow its
+    /// download and pick up the file once it is on this iPad. `nil` for text and sample data.
+    var mediaID: String?
 
-    init(id: UUID = UUID(), kind: Kind, title: String, subtitle: String, slides: [Slide]) {
+    init(id: UUID = UUID(), kind: Kind, title: String, subtitle: String, slides: [Slide], mediaID: String? = nil) {
         self.id = id
         self.kind = kind
         self.title = title
         self.subtitle = subtitle
         self.slides = slides
+        self.mediaID = mediaID
     }
 }
 
@@ -55,5 +59,25 @@ nonisolated struct Slide: Identifiable, Hashable, Sendable {
         self.id = id
         self.label = label
         self.content = content
+    }
+}
+
+nonisolated extension Slide.Content {
+    /// The cached file of a media slide; `nil` for text or while it is not on this iPad.
+    var url: URL? {
+        switch self {
+        case .text: nil
+        case let .image(_, _, url), let .video(_, _, url), let .audio(_, _, url): url
+        }
+    }
+
+    /// The same media with another cached file (or none). Text stays as it is.
+    func replacingURL(_ url: URL?) -> Self {
+        switch self {
+        case .text: self
+        case let .image(title, artwork, _): .image(title: title, artwork: artwork, url: url)
+        case let .video(title, duration, _): .video(title: title, duration: duration, url: url)
+        case let .audio(title, duration, _): .audio(title: title, duration: duration, url: url)
+        }
     }
 }

@@ -12,7 +12,12 @@ struct MediaStageView: View {
     let frame: ProjectionFrame
     var typography = ProjectionSettings()
     let isActive: Bool
+    /// Music and videos can sit in the service before their file is on this iPad.
+    var download: MediaAsset.DownloadState = .ready
+    var onRetry: () -> Void = {}
     let onPresent: () -> Void
+
+    private var isReady: Bool { download == .ready }
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: IrisRadius.lg, style: .continuous)
@@ -39,14 +44,32 @@ struct MediaStageView: View {
             }
             .buttonStyle(.irisPressable)
             .frame(maxWidth: 640)
+            .disabled(!isReady)
             .accessibilityHint(Text("Toca para presentar"))
 
-            Button(action: onPresent) {
-                Label(actionTitle, systemImage: actionIcon)
+            switch download {
+            case .ready:
+                Button(action: onPresent) {
+                    Label(actionTitle, systemImage: actionIcon)
+                }
+                .buttonStyle(.irisPrimary)
+                .frame(width: 300)
+                .disabled(isActive)
+            case .failed:
+                Button(action: onRetry) {
+                    Label("Reintentar descarga", systemImage: "arrow.clockwise")
+                }
+                .buttonStyle(.irisPrimary)
+                .frame(width: 300)
+            case .notDownloaded, .downloading:
+                Button {} label: {
+                    Label(downloadTitle, systemImage: "icloud.and.arrow.down")
+                        .contentTransition(.numericText())
+                }
+                .buttonStyle(.irisPrimary)
+                .frame(width: 300)
+                .disabled(true)
             }
-            .buttonStyle(.irisPrimary)
-            .frame(width: 300)
-            .disabled(isActive)
 
             Text(hint)
                 .font(IrisFont.callout)
@@ -57,6 +80,13 @@ struct MediaStageView: View {
         }
         .frame(maxWidth: .infinity)
         .animation(IrisMotion.smooth, value: isActive)
+    }
+
+    private var downloadTitle: LocalizedStringKey {
+        if case let .downloading(progress) = download {
+            return "Descargando… \(Int(progress * 100)) %"
+        }
+        return "Descargando…"
     }
 
     private var activeBadge: LocalizedStringKey {
@@ -77,7 +107,12 @@ struct MediaStageView: View {
     }
 
     private var hint: LocalizedStringKey {
-        switch kind {
+        switch download {
+        case .failed: return "No se pudo descargar. Revisa la conexión a internet."
+        case .notDownloaded, .downloading: return "Se descarga una sola vez y queda guardada en este iPad."
+        case .ready: break
+        }
+        return switch kind {
         case .music: "La música suena en el salón; el TV no cambia. Contrólala desde el reproductor."
         case .video: "El video se muestra en el TV. Contrólalo desde el reproductor bajo la pantalla en vivo."
         default: "La imagen se muestra a pantalla completa en el TV."

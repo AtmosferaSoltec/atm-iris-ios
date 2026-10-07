@@ -2,7 +2,7 @@
 //  LibraryTabsTests.swift
 //  irisTests
 //
-//  Letras · Música (folder on the iPad) · Multimedia (uploaded on the web).
+//  Letras · Música · Multimedia, all uploaded on the web.
 //
 
 import Foundation
@@ -36,16 +36,17 @@ struct LibraryTabsTests {
         #expect(viewModel.filteredMusic.isEmpty)
     }
 
-    @Test func multimediaMixesImagesVideosAndAudioFromTheWeb() async throws {
+    @Test func multimediaHasImagesAndVideosAndMusicHasItsOwnTab() async throws {
         let repository = MockLibraryRepository(latency: .zero)
         let uploaded = await repository.uploadedMedia()
-        #expect(Set(uploaded.map(\.kind)) == [.image, .video, .music])
+        #expect(Set(uploaded.map(\.kind)) == [.image, .video])
+        #expect(await repository.music().allSatisfy { $0.kind == .music })
+        #expect(await !repository.music().isEmpty)
     }
 
     @Test func backgroundsAreNotListedInMultimedia() async {
         struct WithBackground: LibraryRepository {
             func lyrics() async throws -> [LyricSheet] { [] }
-            func localMusic() async -> [MediaAsset] { [] }
             func media(of kind: MediaAsset.Kind) async throws -> [MediaAsset] {
                 guard kind == .image else { return [] }
                 var background = MediaAsset(id: "bg", kind: .image, title: "Fondo", subtitle: "", duration: nil, artwork: [0, 0])
@@ -68,22 +69,24 @@ struct LibraryTabsTests {
         #expect(viewModel.selectionCount == 1)
     }
 
-    @Test func theMusicFolderListsAudioFilesByName() async throws {
-        LocalMusicFolder.ensureFolderExists()
-        let song = LocalMusicFolder.folderURL.appending(path: "Prueba de carpeta.mp3")
-        let note = LocalMusicFolder.folderURL.appending(path: "notas.txt")
-        try Data("no es audio".utf8).write(to: song)
-        try Data("texto".utf8).write(to: note)
-        defer {
-            try? FileManager.default.removeItem(at: song)
-            try? FileManager.default.removeItem(at: note)
-        }
+    @Test func musicStillInTheCloudCanBeAddedAndKeepsItsLibraryID() throws {
+        var track = MockLibraryRepository.sampleMedia[0]
+        track.downloadState = .notDownloaded
+        var added: [ServiceItem] = []
+        let picker = AddToServiceViewModel(repository: MockLibraryRepository(latency: .zero)) { added = $0 }
+        picker.apply(lyrics: [], music: [track], media: [])
+        picker.toggle(.media(track.id))
+        picker.confirm()
 
-        let files = await LocalMusicFolder.files()
-        let found = try #require(files.first { $0.title == "Prueba de carpeta" })
-        #expect(found.kind == .music)
-        #expect(found.localURL == song)
-        #expect(!files.contains { $0.title == "notas" })
+        let item = try #require(added.first)
+        #expect(item.kind == .music)
+        #expect(item.mediaID == track.id)
+        #expect(item.slides.first?.content.url == nil)
+    }
+
+    @Test func cachedFileNamesGiveBackTheMediaID() {
+        #expect(MediaCache.mediaID(ofFile: "0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b-1760000000000.mp3") == "0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b")
+        #expect(MediaCache.mediaID(ofFile: "singuion.mp3") == nil)
     }
 
     // MARK: Quick listen

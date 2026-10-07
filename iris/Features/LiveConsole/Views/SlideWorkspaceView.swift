@@ -21,7 +21,9 @@ struct SlideWorkspaceView: View {
                     kind: item.kind,
                     frame: viewModel.cardFrame(for: slide),
                     typography: viewModel.typography,
-                    isActive: viewModel.isSelectedMediaActive
+                    isActive: viewModel.isSelectedMediaActive,
+                    download: viewModel.selectedMediaDownload,
+                    onRetry: { viewModel.retrySelectedMediaDownload() }
                 ) {
                     withAnimation(IrisMotion.smooth) { viewModel.presentSelectedMedia() }
                 }

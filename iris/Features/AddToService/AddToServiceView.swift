@@ -12,7 +12,6 @@ struct AddToServiceView: View {
     @Bindable var viewModel: AddToServiceViewModel
 
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.scenePhase) private var scenePhase
     @FocusState private var focus: Field?
 
     private enum Field: Hashable { case search }
@@ -40,7 +39,7 @@ struct AddToServiceView: View {
             )
 
             if viewModel.tab == .music {
-                musicFolderBar
+                musicDownloadHint
             }
 
             content
@@ -57,10 +56,6 @@ struct AddToServiceView: View {
         .task { await viewModel.observeChanges() }
         .onChange(of: viewModel.tab) { viewModel.preview.stop() }
         .onDisappear { viewModel.preview.stop() }
-        // Songs copied in from the Files app show up when the app comes back to the front.
-        .onChange(of: scenePhase) { _, phase in
-            if phase == .active { Task { await viewModel.refreshMusic() } }
-        }
     }
 
     // MARK: Header & footer
@@ -85,7 +80,7 @@ struct AddToServiceView: View {
                     Text("Tu biblioteca")
                         .font(IrisFont.title)
                         .foregroundStyle(IrisColor.textPrimary)
-                    Text("Letras, la música de este iPad y lo que subiste desde la web.")
+                    Text("Letras, música y multimedia que subiste desde la web.")
                         .font(IrisFont.callout)
                         .foregroundStyle(IrisColor.textSecondary)
                 }
@@ -103,19 +98,15 @@ struct AddToServiceView: View {
         }
     }
 
-    /// Where the songs live and how to put new ones there.
-    private var musicFolderBar: some View {
+    /// Where the tracks come from and when they reach this iPad.
+    private var musicDownloadHint: some View {
         HStack(spacing: IrisSpacing.md) {
-            Image(systemName: "folder.fill")
+            Image(systemName: "icloud.and.arrow.down")
                 .foregroundStyle(ServiceItem.Kind.music.tint)
-            Text("Se leen de la carpeta «Música» de este iPad.")
+            Text("Se suben desde la web, en Música. Al agregarlas al servicio se descargan y quedan en este iPad.")
                 .font(IrisFont.callout)
                 .foregroundStyle(IrisColor.textSecondary)
-            Spacer(minLength: IrisSpacing.sm)
-            Button("Abrir carpeta") {
-                LocalMusicFolder.openInFiles()
-            }
-            .buttonStyle(.irisGlass)
+            Spacer(minLength: 0)
         }
     }
 
@@ -174,14 +165,14 @@ struct AddToServiceView: View {
             ContentUnavailableView {
                 Label("Aún no hay música", systemImage: ServiceItem.Kind.music.systemImage)
             } description: {
-                Text("Copia tus canciones (MP3, M4A, WAV…) a la carpeta «Música» de este iPad con el botón «Abrir carpeta».")
+                Text("Sube tus pistas (MP3, M4A, WAV…) desde la web de Iris, en Música.")
             }
             .foregroundStyle(IrisColor.textSecondary)
         case .media:
             ContentUnavailableView {
                 Label("Aún no hay multimedia", systemImage: "photo.on.rectangle.angled")
             } description: {
-                Text("Sube imágenes, videos o audios desde la web de Iris y aparecerán aquí.")
+                Text("Sube imágenes o videos desde la web de Iris, en Multimedia, y aparecerán aquí.")
             }
             .foregroundStyle(IrisColor.textSecondary)
         }
@@ -285,16 +276,14 @@ struct LibraryRow: View {
 
                 if downloadState != .ready {
                     DownloadBadge(state: downloadState)
-                } else {
-                    if let trailing {
-                        Text(trailing)
-                            .font(.system(.callout, design: .monospaced, weight: .medium))
-                            .foregroundStyle(IrisColor.textSecondary)
-                    }
+                } else if let trailing {
+                    Text(trailing)
+                        .font(.system(.callout, design: .monospaced, weight: .medium))
+                        .foregroundStyle(IrisColor.textSecondary)
+                }
 
-                    if showsSelection {
-                        IrisCheckmark(isOn: isSelected)
-                    }
+                if showsSelection {
+                    IrisCheckmark(isOn: isSelected)
                 }
             }
             .padding(IrisSpacing.md - 2)
@@ -308,7 +297,7 @@ struct LibraryRow: View {
             .contentShape(shape)
         }
         .buttonStyle(.irisPressable)
-        .disabled(downloadState != .ready || !showsSelection)
+        .disabled(!showsSelection)
         // Outside the row's button, so playing never selects the song. It sits where the icon is.
         .overlay(alignment: .leading) {
             if let preview {
@@ -348,7 +337,7 @@ struct PreviewPlayButton: View {
     }
 }
 
-/// "Descargando… 40 %", "Pendiente" or "No se pudo descargar" for a file not yet on the iPad.
+/// "Descargando…", "En la nube" or "No se pudo descargar" for a file not yet on the iPad.
 struct DownloadBadge: View {
     let state: MediaAsset.DownloadState
 
@@ -362,8 +351,8 @@ struct DownloadBadge: View {
                     .tint(IrisColor.textSecondary)
                 Text("Descargando…")
             case .notDownloaded:
-                Image(systemName: "icloud.and.arrow.down")
-                Text("Descargando…")
+                Image(systemName: "icloud")
+                Text("En la nube")
             case .failed:
                 Image(systemName: "exclamationmark.icloud")
                     .foregroundStyle(IrisColor.warning)
@@ -394,7 +383,7 @@ struct LibraryMediaTile: View {
                     .aspectRatio(16 / 9, contentMode: .fit)
                     .clipShape(shape)
                     .overlay(alignment: .topTrailing) {
-                        if asset.isAvailable && showsSelection {
+                        if showsSelection {
                             IrisCheckmark(isOn: isSelected)
                                 .padding(IrisSpacing.xs)
                         }
@@ -438,7 +427,7 @@ struct LibraryMediaTile: View {
             }
         }
         .buttonStyle(.irisPressable)
-        .disabled(!asset.isAvailable || !showsSelection)
+        .disabled(!showsSelection)
         .accessibilityLabel(Text(asset.title))
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }

@@ -3,7 +3,7 @@
 //  iris
 //
 //  Songs (contract §10) and media (§11) from the local copy. The iPad only reads them;
-//  they are created on the web.
+//  they are created on the web. Music and video files download when added to a service.
 //
 
 import Foundation
@@ -29,7 +29,7 @@ struct LiveLibraryRepository: LibraryRepository {
 }
 
 extension LiveLibraryRepository {
-    func localMusic() async -> [MediaAsset] { await LocalMusicFolder.files() }
+    func download(_ ids: [MediaAsset.ID]) async { await cache.request(ids) }
 }
 
 struct LiveBackgroundRepository: BackgroundRepository {

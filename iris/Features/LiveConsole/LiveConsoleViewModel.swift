@@ -170,6 +170,15 @@ final class LiveConsoleViewModel {
 
     var items: [ServiceItem] { service?.items ?? [] }
 
+    /// Whether the files behind the service's music, images and videos are on this iPad, by media id.
+    private(set) var mediaDownloads: [String: MediaAsset.DownloadState] = [:]
+
+    /// The open media item's file: music and videos added before downloading wait for it.
+    var selectedMediaDownload: MediaAsset.DownloadState {
+        guard let id = selectedItem?.mediaID else { return .ready }
+        return mediaDownloads[id] ?? .ready
+    }
+
     var serviceTitle: String? { serviceType?.name ?? service?.title }
 
     var showsBible: Bool { modules.bible }
@@ -440,11 +449,41 @@ final class LiveConsoleViewModel {
     }
 
     /// Appends picked library items to the end of the service and opens the first one.
+    /// Files not yet on this iPad start downloading; they stay here afterwards (contract §11).
     func appendToService(_ items: [ServiceItem]) {
         guard !items.isEmpty else { return }
         service?.items.append(contentsOf: items)
         selectedItemID = items.first?.id
         addSheet = nil
+
+        let missing = items.filter { $0.mediaID != nil && $0.slides.first?.content.url == nil }
+        guard !missing.isEmpty else { return }
+        for item in missing where mediaDownloads[item.mediaID!] == nil {
+            mediaDownloads[item.mediaID!] = .notDownloaded
+        }
+        let ids = missing.compactMap(\.mediaID)
+        let library = libraryRepository
+        Task {
+            await library.download(ids)
+            await refreshMediaFiles()
+        }
+    }
+
+    /// Tries again a file that could not be downloaded.
+    func retrySelectedMediaDownload() {
+        guard let id = selectedItem?.mediaID else { return }
+        mediaDownloads[id] = .notDownloaded
+        let library = libraryRepository
+        Task { await library.download([id]) }
+    }
+
+    /// Follows the library while the console is open: downloads finishing, files replaced or
+    /// deleted on the web. Until the calling task is cancelled.
+    func observeLibrary() async {
+        await refreshMediaFiles()
+        for await _ in libraryRepository.changes() {
+            await refreshMediaFiles()
+        }
     }
 
     func removeItem(_ id: ServiceItem.ID) {
@@ -884,6 +923,8 @@ final class LiveConsoleViewModel {
     private func startPlayback(of item: ServiceItem, kind: ServiceItem.Kind, title: String, duration: String, url: URL?) {
         // Without Multimedia the mini player never appears.
         guard modules.multimedia else { return }
+        // A library file still downloading waits for it (sample data has no file and plays as is).
+        if let id = item.mediaID, (mediaDownloads[id] ?? .ready) != .ready { return }
         if playback?.itemID == item.id {
             // Already loaded: just make sure it is playing.
             if playback?.isPlaying == false { togglePlayPause() }
@@ -892,6 +933,36 @@ final class LiveConsoleViewModel {
         mediaPlayback.stop()
         mediaPlayback.play(itemID: item.id, url: url, kind: kind, title: title)
         playback = Playback(itemID: item.id, kind: kind, title: title, duration: Self.seconds(from: duration))
+    }
+
+    /// Points the service's media items at their cached files and records how each download goes.
+    private func refreshMediaFiles() async {
+        let ids = Set(items.compactMap(\.mediaID))
+        guard !ids.isEmpty else { return }
+        var assets: [String: MediaAsset] = [:]
+        for kind in [MediaAsset.Kind.music, .image, .video] {
+            for asset in (try? await libraryRepository.media(of: kind)) ?? [] where ids.contains(asset.id) {
+                assets[asset.id] = asset
+            }
+        }
+
+        // The service may have changed during the reads: patch what is there now.
+        guard var plan = service else { return }
+        var changedItems: Set<ServiceItem.ID> = []
+        for index in plan.items.indices {
+            guard let id = plan.items[index].mediaID else { continue }
+            let asset = assets[id]
+            // Deleted on the web: it can no longer play.
+            mediaDownloads[id] = asset?.downloadState ?? .failed
+            let url = asset?.localURL
+            for slideIndex in plan.items[index].slides.indices where plan.items[index].slides[slideIndex].content.url != url {
+                plan.items[index].slides[slideIndex].content = plan.items[index].slides[slideIndex].content.replacingURL(url)
+                changedItems.insert(plan.items[index].id)
+            }
+        }
+        guard !changedItems.isEmpty else { return }
+        service = plan
+        if let live, changedItems.contains(live.itemID) { pushOutput() }
     }
 
     private func scheduleUndoDismissal() {

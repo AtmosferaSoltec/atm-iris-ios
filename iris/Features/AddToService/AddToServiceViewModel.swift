@@ -13,7 +13,7 @@ import SwiftUI
 @Observable
 final class AddToServiceViewModel: Identifiable {
     enum Tab: Hashable, Identifiable, CaseIterable {
-        /// Lyrics from the library · songs stored on this iPad · everything uploaded on the web.
+        /// Lyrics · tracks (Música on the web) · images and videos (Multimedia on the web).
         case lyrics, music, media
 
         var id: Self { self }
@@ -29,7 +29,7 @@ final class AddToServiceViewModel: Identifiable {
         var searchPrompt: LocalizedStringKey {
             switch self {
             case .lyrics: "Título, autor o letra"
-            case .music: "Nombre de la canción"
+            case .music: "Nombre de la pista"
             case .media: "Nombre del archivo"
             }
         }
@@ -55,9 +55,9 @@ final class AddToServiceViewModel: Identifiable {
 
     private(set) var isLoading = true
     private(set) var lyrics: [LyricSheet] = []
-    /// Songs in the "Música" folder of this iPad.
+    /// Tracks uploaded on the web (Música).
     private(set) var music: [MediaAsset] = []
-    /// Images, videos and audio uploaded on the web.
+    /// Images and videos uploaded on the web (Multimedia).
     private(set) var media: [MediaAsset] = []
     private(set) var selection: [Selection] = []
 
@@ -126,7 +126,7 @@ final class AddToServiceViewModel: Identifiable {
         guard isLoading else { return }
         apply(
             lyrics: (try? await repository.lyrics()) ?? [],
-            music: await repository.localMusic(),
+            music: await repository.music(),
             media: await repository.uploadedMedia()
         )
     }
@@ -139,26 +139,20 @@ final class AddToServiceViewModel: Identifiable {
         isLoading = false
     }
 
-    /// Looks at the "Música" folder again: songs may have been copied in from the Files app.
-    func refreshMusic() async {
-        music = await repository.localMusic()
-        dropUnavailableSelection()
-    }
-
     /// Reloads silently while open (new songs, download progress), until the calling task is cancelled.
     func observeChanges() async {
         for await _ in repository.changes() {
             guard !isLoading else { continue }
             lyrics = (try? await repository.lyrics()) ?? lyrics
+            music = await repository.music()
             media = await repository.uploadedMedia()
-            dropUnavailableSelection()
+            dropRemovedSelection()
         }
     }
 
     func toggle(_ item: Selection) {
+        // Files not yet on this iPad can be picked too: adding them starts the download.
         guard isPicker else { return }
-        // Files still downloading cannot be added: the service must work offline.
-        if case let .media(id) = item, (music + media).first(where: { $0.id == id })?.isAvailable == false { return }
         if let index = selection.firstIndex(of: item) {
             selection.remove(at: index)
         } else {
@@ -174,10 +168,10 @@ final class AddToServiceViewModel: Identifiable {
 
     // MARK: Private
 
-    /// A selection whose file disappeared can no longer be added.
-    private func dropUnavailableSelection() {
+    /// A selection deleted on the web meanwhile can no longer be added.
+    private func dropRemovedSelection() {
         selection.removeAll { item in
-            if case let .media(id) = item { return !(music + media).contains { $0.id == id && $0.isAvailable } }
+            if case let .media(id) = item { return !(music + media).contains { $0.id == id } }
             return false
         }
     }
@@ -202,21 +196,24 @@ final class AddToServiceViewModel: Identifiable {
                     kind: .music,
                     title: asset.title,
                     subtitle: "\(asset.subtitle) · \(asset.duration ?? "")",
-                    slides: [Slide(content: .audio(title: asset.title, duration: asset.duration ?? "", url: asset.localURL))]
+                    slides: [Slide(content: .audio(title: asset.title, duration: asset.duration ?? "", url: asset.localURL))],
+                    mediaID: asset.id
                 )
             case .image:
                 return ServiceItem(
                     kind: .image,
                     title: asset.title,
                     subtitle: asset.subtitle,
-                    slides: [Slide(content: .image(title: asset.title, artwork: asset.artwork, url: asset.localURL))]
+                    slides: [Slide(content: .image(title: asset.title, artwork: asset.artwork, url: asset.localURL))],
+                    mediaID: asset.id
                 )
             case .video:
                 return ServiceItem(
                     kind: .video,
                     title: asset.title,
                     subtitle: String(localized: "Video · \(asset.duration ?? "")"),
-                    slides: [Slide(content: .video(title: asset.title, duration: asset.duration ?? "", url: asset.localURL))]
+                    slides: [Slide(content: .video(title: asset.title, duration: asset.duration ?? "", url: asset.localURL))],
+                    mediaID: asset.id
                 )
             }
         }

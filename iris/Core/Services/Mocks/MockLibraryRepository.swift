@@ -18,11 +18,6 @@ struct MockLibraryRepository: LibraryRepository {
         return Self.sampleMedia.filter { $0.kind == kind }
     }
 
-    func localMusic() async -> [MediaAsset] {
-        try? await Task.sleep(for: latency)
-        return Self.sampleMedia.filter { $0.kind == .music }
-    }
-
     // MARK: Sample data (public-domain hymn texts)
 
     static let sampleLyrics: [LyricSheet] = [

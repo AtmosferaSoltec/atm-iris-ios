@@ -285,3 +285,74 @@ struct ServiceSessionTests {
         #expect(viewModel.isConfirmingExit == false)
     }
 }
+
+/// Music added before its file is on the iPad waits for the download, then plays the cached file.
+@MainActor
+struct CloudMusicTests {
+    /// A library whose one track finishes downloading when the test says so.
+    private final class DownloadingLibrary: LibraryRepository, @unchecked Sendable {
+        var track = MediaAsset(id: "t1", kind: .music, title: "Preludio", subtitle: "", duration: "3:40", artwork: [0, 0], downloadState: .notDownloaded)
+        private(set) var requested: [MediaAsset.ID] = []
+        private var continuation: AsyncStream<Void>.Continuation?
+
+        func lyrics() async throws -> [LyricSheet] { [] }
+        func media(of kind: MediaAsset.Kind) async throws -> [MediaAsset] { kind == .music ? [track] : [] }
+        func download(_ ids: [MediaAsset.ID]) async { requested += ids }
+        func changes() -> AsyncStream<Void> {
+            AsyncStream { self.continuation = $0 }
+        }
+
+        func finish(at url: URL) {
+            track.downloadState = .ready
+            track.localURL = url
+            continuation?.yield()
+        }
+    }
+
+    @Test func playsOnlyOnceTheFileIsHere() async throws {
+        let store = InMemoryChurchStore()
+        let library = DownloadingLibrary()
+        let playback = MockMediaPlaybackService()
+        let viewModel = LiveConsoleViewModel(
+            session: .preview,
+            serviceType: store.serviceTypes[0],
+            modules: ChurchModules(),
+            people: store.people,
+            servicePlanRepository: EmptyServicePlanRepository(),
+            projectionSettings: MockProjectionSettingsRepository(store: store, latency: .zero),
+            backgroundRepository: MockBackgroundRepository(),
+            bibleRepository: MockBibleRepository(),
+            libraryRepository: library,
+            mediaPlayback: playback,
+            displayOutput: MockDisplayOutputService(),
+            serviceTypes: MockServiceTypeRepository(store: store, latency: .zero),
+            peopleRepository: MockPeopleRepository(store: store, latency: .zero),
+            timeRecords: MockTimeRecordRepository(store: store, latency: .zero)
+        )
+        await viewModel.load()
+        let observing = Task { await viewModel.observeLibrary() }
+        defer { observing.cancel() }
+
+        viewModel.appendToService([
+            ServiceItem(kind: .music, title: "Preludio", subtitle: "", slides: [Slide(content: .audio(title: "Preludio", duration: "3:40"))], mediaID: "t1")
+        ])
+        #expect(viewModel.selectedMediaDownload == .notDownloaded)
+        viewModel.presentSelectedMedia()
+        #expect(viewModel.playback == nil)
+        try await waitUntil { library.requested == ["t1"] }
+
+        let file = URL.temporaryDirectory.appending(path: "preludio.mp3")
+        library.finish(at: file)
+        try await waitUntil { viewModel.selectedMediaDownload == .ready }
+        #expect(viewModel.selectedItem?.slides.first?.content.url == file)
+        viewModel.presentSelectedMedia()
+        #expect(viewModel.playback?.title == "Preludio")
+    }
+
+    private func waitUntil(_ condition: () -> Bool) async throws {
+        for _ in 0..<200 where !condition() {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(condition())
+    }
+}

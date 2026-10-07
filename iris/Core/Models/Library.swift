@@ -60,6 +60,7 @@ nonisolated struct MediaAsset: Identifiable, Hashable, Sendable {
     /// Images only: offered in the background picker.
     var isBackground = false
 
-    /// Only downloaded files can be added to a service, so they project without network.
+    /// The file is on this iPad: it can play or go to the TV. Music and videos can be added to a
+    /// service before that; adding them starts the download.
     var isAvailable: Bool { downloadState == .ready }
 }

@@ -32,6 +32,7 @@ struct LiveConsoleView: View {
         .task { await viewModel.runPlaybackClock() }
         .task { await viewModel.runBlockClock() }
         .task { await viewModel.observeDisplay() }
+        .task { await viewModel.observeLibrary() }
         .alert("El servicio sigue en curso", isPresented: $viewModel.isConfirmingExit) {
             Button("Terminar y guardar") {
                 Task { await viewModel.finishAndExit() }

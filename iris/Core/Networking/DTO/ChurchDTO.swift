@@ -31,6 +31,14 @@ nonisolated struct ChurchDTO: Codable, Hashable, Sendable {
     nonisolated struct Storage: Codable, Hashable, Sendable {
         let usedBytes: Int64
         let quotaBytes: Int64
+        /// What Música, Fondos and Multimedia take (contract §6). Optional: copies saved before it existed lack it.
+        let breakdown: Breakdown?
+    }
+
+    nonisolated struct Breakdown: Codable, Hashable, Sendable {
+        let musicBytes: Int64
+        let backgroundBytes: Int64
+        let mediaBytes: Int64
     }
 
     let id: String

@@ -76,6 +76,10 @@ struct AppDependencies {
 
         let data = LiveChurchData(store: localStore, outbox: outbox, sync: sync, changes: changes)
 
+        // Music used to be copied by hand into Documents/Música; it now comes from the web (contract §11).
+        // Nothing reads that folder any more and Files no longer shows it, so it only took space.
+        try? FileManager.default.removeItem(at: URL.documentsDirectory.appending(path: "Música", directoryHint: .isDirectory))
+
         // Media files follow each sync, in the background, only with the Multimedia module.
         let mediaCache = MediaCache(client: client, downloader: .shared)
         Task {
