@@ -85,7 +85,15 @@ final class BiblePickerViewModel: Identifiable {
                 retryDownload()
             }
             if availability == .ready, books.isEmpty {
-                books = (try? await repository.books()) ?? []
+                do {
+                    books = try await repository.books()
+                } catch where !askedForDownload {
+                    // "Ready" but unreadable (a damaged copy): download it again instead of an empty list.
+                    askedForDownload = true
+                    retryDownload()
+                } catch {
+                    self.availability = .failed(message: String(localized: "No pudimos abrir la Biblia en este iPad. Inténtalo de nuevo."))
+                }
             }
         }
     }

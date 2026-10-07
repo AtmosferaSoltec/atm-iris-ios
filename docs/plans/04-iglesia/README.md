@@ -42,3 +42,11 @@ Fases 02 y 03.
   ViewModel), y Personas muestra el mensaje del repositorio en vez del genérico.
 - Personas sigue contando bloques con los registros locales (no con `blockCount`), lo que da el mismo número sin conexión.
 - `LiveTimeRecordRepository` se hizo aquí junto a los demás; su comportamiento es el de la fase 08.
+
+- **Módulos del sistema (2026-10-07)**: `ChurchDTO.availableModules` (contrato §6) dice qué módulos existen hoy en Iris.
+  Lo que está en `false` no aparece en Módulos ni en el tile de Inicio; guardar los demás interruptores no lo cambia
+  (la API lo ignora). Hoy: la Biblia.
+
+- **Proyección (2026-10-07)**: `ChurchRepositories.swift` gana `ProjectionSettingsRepository` (mismo patrón que
+  `ModuleSettingsRepository`): `settings()`, `save(_:)`, `changes()`. Vive en Módulos › Proyección, con el mismo
+  permiso (`modules.manage`) y el mismo guardado inmediato con reversión si falla.

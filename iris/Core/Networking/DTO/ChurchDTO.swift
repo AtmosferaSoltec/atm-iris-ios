@@ -13,6 +13,20 @@ nonisolated struct ChurchModulesDTO: Codable, Hashable, Sendable {
     let timeControl: Bool
 }
 
+nonisolated struct ProjectionSettingsDTO: Codable, Hashable, Sendable {
+    let fontFamily: String
+    let fontSizePt: Int
+    let defaultBackgroundId: String?
+
+    // `defaultBackgroundId` travels as `null`, never omitted (same reason as `BlockTemplateDTO`).
+    func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(fontFamily, forKey: .fontFamily)
+        try container.encode(fontSizePt, forKey: .fontSizePt)
+        try container.encode(defaultBackgroundId, forKey: .defaultBackgroundId)
+    }
+}
+
 nonisolated struct ChurchDTO: Codable, Hashable, Sendable {
     nonisolated struct Storage: Codable, Hashable, Sendable {
         let usedBytes: Int64
@@ -22,7 +36,12 @@ nonisolated struct ChurchDTO: Codable, Hashable, Sendable {
     let id: String
     let name: String
     let timezone: String
+    /// What the church sees on: its choice, minus what is switched off for all of Iris.
     let modules: ChurchModulesDTO
+    /// Modules that exist in Iris today (contract §6). Absent from older servers: everything exists.
+    let availableModules: ChurchModulesDTO?
+    /// Absent from older servers: the defaults (`ProjectionSettings()`) apply.
+    let projection: ProjectionSettingsDTO?
     let storage: Storage
     let createdAt: Date
     let updatedAt: Date

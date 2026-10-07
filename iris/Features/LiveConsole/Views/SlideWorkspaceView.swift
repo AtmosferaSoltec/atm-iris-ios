@@ -20,6 +20,7 @@ struct SlideWorkspaceView: View {
                 MediaStageView(
                     kind: item.kind,
                     frame: viewModel.cardFrame(for: slide),
+                    typography: viewModel.typography,
                     isActive: viewModel.isSelectedMediaActive
                 ) {
                     withAnimation(IrisMotion.smooth) { viewModel.presentSelectedMedia() }
@@ -142,6 +143,7 @@ struct SlideWorkspaceView: View {
                     ForEach(Array(item.slides.enumerated()), id: \.element.id) { index, slide in
                         SlideCard(
                             frame: viewModel.cardFrame(for: slide),
+                            typography: viewModel.typography,
                             label: slide.label,
                             isSelected: viewModel.isLive(slideIndex: index)
                         ) {
@@ -165,6 +167,7 @@ struct SlideWorkspaceView: View {
 /// The label underneath is optional — not every slide has one.
 struct SlideCard: View {
     let frame: ProjectionFrame
+    var typography = ProjectionSettings()
     let label: String?
     let isSelected: Bool
     let action: () -> Void
@@ -174,7 +177,7 @@ struct SlideCard: View {
 
         Button(action: action) {
             VStack(alignment: .leading, spacing: IrisSpacing.xs) {
-                ProjectionCanvas(frame: frame)
+                ProjectionCanvas(frame: frame, typography: typography)
                     .overlay {
                         shape.strokeBorder(
                             isSelected ? AnyShapeStyle(IrisGradient.accent) : AnyShapeStyle(IrisColor.stroke),

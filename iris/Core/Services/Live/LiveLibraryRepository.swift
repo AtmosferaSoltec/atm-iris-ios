@@ -28,6 +28,10 @@ struct LiveLibraryRepository: LibraryRepository {
     }
 }
 
+extension LiveLibraryRepository {
+    func localMusic() async -> [MediaAsset] { await LocalMusicFolder.files() }
+}
+
 struct LiveBackgroundRepository: BackgroundRepository {
     let library: any LibraryRepository
 

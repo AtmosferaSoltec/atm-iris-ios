@@ -64,6 +64,7 @@ struct ModulesTests {
             session: .preview,
             modules: modules,
             servicePlanRepository: MockServicePlanRepository(latency: .zero),
+            projectionSettings: MockProjectionSettingsRepository(store: InMemoryChurchStore(), latency: .zero),
             backgroundRepository: MockBackgroundRepository(),
             bibleRepository: MockBibleRepository(),
             libraryRepository: MockLibraryRepository(latency: .zero),

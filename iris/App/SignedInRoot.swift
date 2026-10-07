@@ -9,7 +9,7 @@ import SwiftUI
 @Observable
 final class SignedInNavigator {
     enum Route: Equatable {
-        case home, console(ServiceType), modules, services, people, times
+        case home, console(ServiceType), library, modules, services, people, times
     }
 
     private(set) var route: Route = .home
@@ -100,9 +100,27 @@ struct SignedInRoot: View {
                     account: account
                 )
                 .transition(.opacity)
+            case .library:
+                secondaryScreen(String(localized: "Biblioteca")) {
+                    AddToServiceView(
+                        viewModel: AddToServiceViewModel(
+                            repository: dependencies.libraryRepository,
+                            tabs: homeViewModel.modules.multimedia ? AddToServiceViewModel.Tab.allCases : [.lyrics],
+                            mode: .browse
+                        )
+                    )
+                }
+                    .transition(.opacity)
             case .modules:
-                secondaryScreen(String(localized: "Módulos")) {
-                    ModulesView(viewModel: ModulesViewModel(moduleSettings: dependencies.moduleSettings, session: context))
+                secondaryScreen(String(localized: "Configuración")) {
+                    ModulesView(
+                        viewModel: ModulesViewModel(
+                            moduleSettings: dependencies.moduleSettings,
+                            projectionSettings: dependencies.projectionSettings,
+                            backgroundRepository: dependencies.backgroundRepository,
+                            session: context
+                        )
+                    )
                 }
                     .transition(.opacity)
             case .services:

@@ -5,12 +5,16 @@
 
 import Foundation
 import Observation
+import SwiftUI
 
-/// Browse the library in four tabs and pick items to append to the service.
+/// Browse the library in three tabs: Letras · Música · Multimedia.
+/// As a picker, items can be chosen across tabs and appended to the service in pick order;
+/// in browse mode (Home › Biblioteca) it only shows what the church has.
 @Observable
 final class AddToServiceViewModel: Identifiable {
     enum Tab: Hashable, Identifiable, CaseIterable {
-        case lyrics, music, images, videos
+        /// Lyrics from the library · songs stored on this iPad · everything uploaded on the web.
+        case lyrics, music, media
 
         var id: Self { self }
 
@@ -18,11 +22,20 @@ final class AddToServiceViewModel: Identifiable {
             switch self {
             case .lyrics: "Letras"
             case .music: "Música"
-            case .images: "Imágenes"
-            case .videos: "Videos"
+            case .media: "Multimedia"
+            }
+        }
+
+        var searchPrompt: LocalizedStringKey {
+            switch self {
+            case .lyrics: "Título, autor o letra"
+            case .music: "Nombre de la canción"
+            case .media: "Nombre del archivo"
             }
         }
     }
+
+    enum Mode { case picker, browse }
 
     /// Identifies anything selectable across tabs, in the order it was picked.
     enum Selection: Hashable {
@@ -36,20 +49,30 @@ final class AddToServiceViewModel: Identifiable {
     var query = ""
     /// Tabs allowed by the church's modules; only Letras without Multimedia.
     let tabs: [Tab]
+    let mode: Mode
+    /// Plays the first seconds of a song from the Música tab.
+    let preview = MusicPreviewPlayer()
 
     private(set) var isLoading = true
     private(set) var lyrics: [LyricSheet] = []
+    /// Songs in the "Música" folder of this iPad.
     private(set) var music: [MediaAsset] = []
-    private(set) var images: [MediaAsset] = []
-    private(set) var videos: [MediaAsset] = []
+    /// Images, videos and audio uploaded on the web.
+    private(set) var media: [MediaAsset] = []
     private(set) var selection: [Selection] = []
 
     private let repository: any LibraryRepository
     private let onAdd: ([ServiceItem]) -> Void
 
-    init(repository: any LibraryRepository, tabs: [Tab] = Tab.allCases, onAdd: @escaping ([ServiceItem]) -> Void) {
+    init(
+        repository: any LibraryRepository,
+        tabs: [Tab] = Tab.allCases,
+        mode: Mode = .picker,
+        onAdd: @escaping ([ServiceItem]) -> Void = { _ in }
+    ) {
         self.repository = repository
         self.tabs = tabs
+        self.mode = mode
         self.tab = tabs.first ?? .lyrics
         self.onAdd = onAdd
     }
@@ -65,21 +88,28 @@ final class AddToServiceViewModel: Identifiable {
         }
     }
 
-    /// The church has no songs yet (not a search without results).
-    var isLibraryEmpty: Bool { tab == .lyrics && lyrics.isEmpty }
+    /// Music is found by the song's name, which is the file's name.
+    var filteredMusic: [MediaAsset] { music.filter { matches($0.title) } }
+    var filteredMedia: [MediaAsset] { media.filter { matches($0.title) } }
 
-    var filteredMusic: [MediaAsset] { music.filter { matches($0.title) || matches($0.subtitle) } }
-    var filteredImages: [MediaAsset] { images.filter { matches($0.title) } }
-    var filteredVideos: [MediaAsset] { videos.filter { matches($0.title) } }
+    /// The current tab has nothing at all yet (not a search without results).
+    var isLibraryEmpty: Bool {
+        switch tab {
+        case .lyrics: lyrics.isEmpty
+        case .music: music.isEmpty
+        case .media: media.isEmpty
+        }
+    }
 
     var isCurrentTabEmpty: Bool {
         switch tab {
         case .lyrics: filteredLyrics.isEmpty
         case .music: filteredMusic.isEmpty
-        case .images: filteredImages.isEmpty
-        case .videos: filteredVideos.isEmpty
+        case .media: filteredMedia.isEmpty
         }
     }
+
+    var isPicker: Bool { mode == .picker }
 
     var selectionCount: Int { selection.count }
 
@@ -93,44 +123,42 @@ final class AddToServiceViewModel: Identifiable {
     // MARK: Intents
 
     func load() async {
-        guard lyrics.isEmpty else { return }
-        isLoading = true
+        guard isLoading else { return }
         apply(
             lyrics: (try? await repository.lyrics()) ?? [],
-            media: ((try? await repository.media(of: .music)) ?? [])
-                + ((try? await repository.media(of: .image)) ?? [])
-                + ((try? await repository.media(of: .video)) ?? [])
+            music: await repository.localMusic(),
+            media: await repository.uploadedMedia()
         )
     }
 
     /// Installs library content. Also used by previews to start loaded.
-    func apply(lyrics: [LyricSheet], media: [MediaAsset]) {
+    func apply(lyrics: [LyricSheet], music: [MediaAsset], media: [MediaAsset]) {
         self.lyrics = lyrics
-        music = media.filter { $0.kind == .music }
-        images = media.filter { $0.kind == .image }
-        videos = media.filter { $0.kind == .video }
+        self.music = music
+        self.media = media
         isLoading = false
+    }
+
+    /// Looks at the "Música" folder again: songs may have been copied in from the Files app.
+    func refreshMusic() async {
+        music = await repository.localMusic()
+        dropUnavailableSelection()
     }
 
     /// Reloads silently while open (new songs, download progress), until the calling task is cancelled.
     func observeChanges() async {
         for await _ in repository.changes() {
             guard !isLoading else { continue }
-            let media = ((try? await repository.media(of: .music)) ?? music)
-                + ((try? await repository.media(of: .image)) ?? images)
-                + ((try? await repository.media(of: .video)) ?? videos)
-            apply(lyrics: (try? await repository.lyrics()) ?? lyrics, media: media)
-            // A selection whose file disappeared can no longer be added.
-            selection.removeAll { item in
-                if case let .media(id) = item { return !media.contains { $0.id == id && $0.isAvailable } }
-                return false
-            }
+            lyrics = (try? await repository.lyrics()) ?? lyrics
+            media = await repository.uploadedMedia()
+            dropUnavailableSelection()
         }
     }
 
     func toggle(_ item: Selection) {
+        guard isPicker else { return }
         // Files still downloading cannot be added: the service must work offline.
-        if case let .media(id) = item, (music + images + videos).first(where: { $0.id == id })?.isAvailable == false { return }
+        if case let .media(id) = item, (music + media).first(where: { $0.id == id })?.isAvailable == false { return }
         if let index = selection.firstIndex(of: item) {
             selection.remove(at: index)
         } else {
@@ -146,6 +174,14 @@ final class AddToServiceViewModel: Identifiable {
 
     // MARK: Private
 
+    /// A selection whose file disappeared can no longer be added.
+    private func dropUnavailableSelection() {
+        selection.removeAll { item in
+            if case let .media(id) = item { return !(music + media).contains { $0.id == id && $0.isAvailable } }
+            return false
+        }
+    }
+
     private func matches(_ text: String) -> Bool {
         let trimmed = query.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return true }
@@ -159,7 +195,7 @@ final class AddToServiceViewModel: Identifiable {
             return ServiceItem(kind: .song, title: sheet.title, subtitle: sheet.author, slides: sheet.sections)
 
         case let .media(id):
-            guard let asset = (music + images + videos).first(where: { $0.id == id }) else { return nil }
+            guard let asset = (music + media).first(where: { $0.id == id }) else { return nil }
             switch asset.kind {
             case .music:
                 return ServiceItem(

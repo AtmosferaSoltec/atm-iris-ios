@@ -54,18 +54,17 @@ struct ServicesTile: View {
     }
 }
 
-/// Library counts per content kind. Does not navigate yet: the Biblioteca screen is out of scope.
+/// Library counts: lyrics, music on this iPad and web uploads. Opens the Biblioteca screen.
 struct LibraryTile: View {
     let viewModel: HomeViewModel
 
     var body: some View {
-        IrisTile("Biblioteca", subtitle: String(localized: "Tu contenido"), systemImage: "square.stack.fill", tint: IrisColor.violet) {
+        IrisTile("Biblioteca", subtitle: String(localized: "Tu contenido"), systemImage: "square.stack.fill", tint: IrisColor.violet, action: viewModel.openLibrary) {
             LazyVGrid(columns: [GridItem(.flexible(), spacing: IrisSpacing.sm), GridItem(.flexible())], spacing: IrisSpacing.sm) {
                 count(viewModel.library.lyrics, label: "Letras", kind: .song)
                 if viewModel.modules.multimedia {
                     count(viewModel.library.music, label: "Música", kind: .music)
-                    count(viewModel.library.images, label: "Imágenes", kind: .image)
-                    count(viewModel.library.videos, label: "Videos", kind: .video)
+                    count(viewModel.library.media, label: "Multimedia", kind: .image)
                 }
             }
         }
@@ -138,15 +137,17 @@ struct ModulesTile: View {
 
     var body: some View {
         IrisTile(
-            "Módulos",
-            subtitle: String(localized: "Elige qué usar"),
+            "Configuración",
+            subtitle: String(localized: "Qué usa tu iglesia y cómo se ve"),
             systemImage: "switch.2",
             tint: IrisColor.success,
             action: { viewModel.openModules() }
         ) {
             VStack(spacing: IrisSpacing.sm) {
                 row("Letras", isOn: true)
-                row("Biblia", isOn: viewModel.modules.bible)
+                if viewModel.availableModules.bible {
+                    row("Biblia", isOn: viewModel.modules.bible)
+                }
                 row("Multimedia", isOn: viewModel.modules.multimedia)
                 row("Control de tiempo", isOn: viewModel.modules.timeControl)
             }

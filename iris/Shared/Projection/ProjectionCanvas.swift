@@ -13,6 +13,9 @@ struct ProjectionCanvas: View {
     var cornerRadius: CGFloat = IrisRadius.sm
     /// Only the live preview should animate; thumbnails stay static for performance.
     var isAnimated = false
+    /// How the lyrics look (contract §6); the same value everywhere draws a thumbnail, the live
+    /// preview and the TV identically, exactly like `frame` itself.
+    var typography = ProjectionSettings()
 
     @Environment(\.projectionVideoPlayer) private var videoPlayer
 
@@ -49,14 +52,14 @@ struct ProjectionCanvas: View {
         case let .text(body, footnote):
             VStack(spacing: width * 0.025) {
                 Text(body)
-                    .font(.system(size: width * 0.046, weight: .medium, design: .serif))
+                    .font(typography.bodyFont(width: width))
                     .lineSpacing(width * 0.006)
                     .multilineTextAlignment(.center)
                     .minimumScaleFactor(0.5)
 
                 if let footnote {
                     Text(footnote)
-                        .font(.system(size: width * 0.022, weight: .semibold))
+                        .font(typography.footnoteFont(width: width))
                         .tracking(width * 0.003)
                         .textCase(.uppercase)
                         .opacity(0.6)

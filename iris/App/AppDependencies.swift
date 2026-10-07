@@ -17,6 +17,7 @@ struct AppDependencies {
     let mediaPlayback: any MediaPlaybackService
     let displayOutput: any DisplayOutputService
     let moduleSettings: any ModuleSettingsRepository
+    let projectionSettings: any ProjectionSettingsRepository
     let serviceTypes: any ServiceTypeRepository
     let people: any PeopleRepository
     let timeRecords: any TimeRecordRepository
@@ -43,6 +44,7 @@ struct AppDependencies {
             mediaPlayback: MockMediaPlaybackService(),
             displayOutput: MockDisplayOutputService(),
             moduleSettings: MockModuleSettingsRepository(store: churchStore),
+            projectionSettings: MockProjectionSettingsRepository(store: churchStore),
             serviceTypes: MockServiceTypeRepository(store: churchStore),
             people: MockPeopleRepository(store: churchStore),
             timeRecords: MockTimeRecordRepository(store: churchStore),
@@ -123,6 +125,7 @@ struct AppDependencies {
             mediaPlayback: LiveMediaPlaybackService(),
             displayOutput: LiveDisplayOutputService(),
             moduleSettings: LiveModuleSettingsRepository(data: data),
+            projectionSettings: LiveProjectionSettingsRepository(data: data),
             serviceTypes: LiveServiceTypeRepository(data: data),
             people: LivePeopleRepository(data: data),
             timeRecords: LiveTimeRecordRepository(data: data),

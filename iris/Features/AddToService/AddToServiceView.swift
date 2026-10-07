@@ -5,12 +5,14 @@
 
 import SwiftUI
 
-/// Library browser with four tabs: Letras · Música · Imágenes · Videos.
-/// Items can be picked across tabs and are appended to the service in pick order.
+/// Library browser with three tabs: Letras · Música · Multimedia.
+/// As a picker, items can be chosen across tabs and are appended to the service in pick order.
+/// In browse mode (Home › Biblioteca) it only shows the library.
 struct AddToServiceView: View {
     @Bindable var viewModel: AddToServiceViewModel
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
     @FocusState private var focus: Field?
 
     private enum Field: Hashable { case search }
@@ -31,22 +33,34 @@ struct AddToServiceView: View {
                 "Buscar",
                 icon: "magnifyingglass",
                 text: $viewModel.query,
-                prompt: "Título, autor o descripción",
+                prompt: viewModel.tab.searchPrompt,
                 kind: .text,
                 focus: $focus,
                 field: .search
             )
 
+            if viewModel.tab == .music {
+                musicFolderBar
+            }
+
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
 
-            footer
+            if viewModel.isPicker {
+                footer
+            }
         }
         .padding(IrisSpacing.xl)
         .presentationSizing(.page)
         .presentationBackground(IrisColor.canvasElevated)
         .task { await viewModel.load() }
         .task { await viewModel.observeChanges() }
+        .onChange(of: viewModel.tab) { viewModel.preview.stop() }
+        .onDisappear { viewModel.preview.stop() }
+        // Songs copied in from the Files app show up when the app comes back to the front.
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { Task { await viewModel.refreshMusic() } }
+        }
     }
 
     // MARK: Header & footer
@@ -54,27 +68,54 @@ struct AddToServiceView: View {
     private var header: some View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 2) {
-                Text("Agregar al servicio")
-                    .font(IrisFont.title)
-                    .foregroundStyle(IrisColor.textPrimary)
-                Group {
-                    if viewModel.isLyricsOnly {
-                        Text("Elige letras de tu biblioteca.")
-                    } else {
-                        Text("Elige letras, música, imágenes o videos de tu biblioteca.")
+                if viewModel.isPicker {
+                    Text("Agregar al servicio")
+                        .font(IrisFont.title)
+                        .foregroundStyle(IrisColor.textPrimary)
+                    Group {
+                        if viewModel.isLyricsOnly {
+                            Text("Elige letras de tu biblioteca.")
+                        } else {
+                            Text("Elige letras, música o multimedia para tu servicio.")
+                        }
                     }
+                    .font(IrisFont.callout)
+                    .foregroundStyle(IrisColor.textSecondary)
+                } else {
+                    Text("Tu biblioteca")
+                        .font(IrisFont.title)
+                        .foregroundStyle(IrisColor.textPrimary)
+                    Text("Letras, la música de este iPad y lo que subiste desde la web.")
+                        .font(IrisFont.callout)
+                        .foregroundStyle(IrisColor.textSecondary)
                 }
-                .font(IrisFont.callout)
-                .foregroundStyle(IrisColor.textSecondary)
             }
             Spacer()
-            Button {
-                dismiss()
-            } label: {
-                Image(systemName: "xmark")
+            if viewModel.isPicker {
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "xmark")
+                }
+                .buttonStyle(.irisIcon)
+                .accessibilityLabel(Text("Cerrar"))
             }
-            .buttonStyle(.irisIcon)
-            .accessibilityLabel(Text("Cerrar"))
+        }
+    }
+
+    /// Where the songs live and how to put new ones there.
+    private var musicFolderBar: some View {
+        HStack(spacing: IrisSpacing.md) {
+            Image(systemName: "folder.fill")
+                .foregroundStyle(ServiceItem.Kind.music.tint)
+            Text("Se leen de la carpeta «Música» de este iPad.")
+                .font(IrisFont.callout)
+                .foregroundStyle(IrisColor.textSecondary)
+            Spacer(minLength: IrisSpacing.sm)
+            Button("Abrir carpeta") {
+                LocalMusicFolder.openInFiles()
+            }
+            .buttonStyle(.irisGlass)
         }
     }
 
@@ -106,12 +147,7 @@ struct AddToServiceView: View {
                 .tint(IrisColor.textSecondary)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if viewModel.isLibraryEmpty {
-            ContentUnavailableView {
-                Label("Aún no hay canciones", systemImage: ServiceItem.Kind.song.systemImage)
-            } description: {
-                Text("Agrégalas desde la web de Iris.")
-            }
-            .foregroundStyle(IrisColor.textSecondary)
+            emptyLibrary
         } else if viewModel.isCurrentTabEmpty {
             ContentUnavailableView.search(text: viewModel.query)
                 .foregroundStyle(IrisColor.textSecondary)
@@ -121,6 +157,33 @@ struct AddToServiceView: View {
                     .padding(.vertical, IrisSpacing.xxs)
             }
             .scrollIndicators(.hidden)
+        }
+    }
+
+    @ViewBuilder
+    private var emptyLibrary: some View {
+        switch viewModel.tab {
+        case .lyrics:
+            ContentUnavailableView {
+                Label("Aún no hay canciones", systemImage: ServiceItem.Kind.song.systemImage)
+            } description: {
+                Text("Agrégalas desde la web de Iris.")
+            }
+            .foregroundStyle(IrisColor.textSecondary)
+        case .music:
+            ContentUnavailableView {
+                Label("Aún no hay música", systemImage: ServiceItem.Kind.music.systemImage)
+            } description: {
+                Text("Copia tus canciones (MP3, M4A, WAV…) a la carpeta «Música» de este iPad con el botón «Abrir carpeta».")
+            }
+            .foregroundStyle(IrisColor.textSecondary)
+        case .media:
+            ContentUnavailableView {
+                Label("Aún no hay multimedia", systemImage: "photo.on.rectangle.angled")
+            } description: {
+                Text("Sube imágenes, videos o audios desde la web de Iris y aparecerán aquí.")
+            }
+            .foregroundStyle(IrisColor.textSecondary)
         }
     }
 
@@ -135,9 +198,8 @@ struct AddToServiceView: View {
                         tint: ServiceItem.Kind.song.tint,
                         title: sheet.title,
                         subtitle: sheet.author,
-                        footnote: sheet.copyright,
-                        preview: sheet.firstLine,
                         trailing: nil,
+                        showsSelection: viewModel.isPicker,
                         isSelected: viewModel.isSelected(.lyric(sheet.id))
                     ) {
                         viewModel.toggle(.lyric(sheet.id))
@@ -153,9 +215,10 @@ struct AddToServiceView: View {
                         tint: ServiceItem.Kind.music.tint,
                         title: asset.title,
                         subtitle: asset.subtitle,
-                        preview: nil,
                         trailing: asset.duration,
                         downloadState: asset.downloadState,
+                        showsSelection: viewModel.isPicker,
+                        preview: asset.localURL.map { PreviewControl(player: viewModel.preview, url: $0) },
                         isSelected: viewModel.isSelected(.media(asset.id))
                     ) {
                         viewModel.toggle(.media(asset.id))
@@ -163,19 +226,16 @@ struct AddToServiceView: View {
                 }
             }
 
-        case .images:
-            mediaGrid(viewModel.filteredImages)
-
-        case .videos:
-            mediaGrid(viewModel.filteredVideos)
-        }
-    }
-
-    private func mediaGrid(_ assets: [MediaAsset]) -> some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 200), spacing: IrisSpacing.md)], spacing: IrisSpacing.lg) {
-            ForEach(assets) { asset in
-                LibraryMediaTile(asset: asset, isSelected: viewModel.isSelected(.media(asset.id))) {
-                    viewModel.toggle(.media(asset.id))
+        case .media:
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 200), spacing: IrisSpacing.md)], spacing: IrisSpacing.lg) {
+                ForEach(viewModel.filteredMedia) { asset in
+                    LibraryMediaTile(
+                        asset: asset,
+                        showsSelection: viewModel.isPicker,
+                        isSelected: viewModel.isSelected(.media(asset.id))
+                    ) {
+                        viewModel.toggle(.media(asset.id))
+                    }
                 }
             }
         }
@@ -190,11 +250,12 @@ struct LibraryRow: View {
     let tint: Color
     let title: String
     let subtitle: String
-    /// Copyright, under the author.
-    var footnote: String?
-    let preview: String?
     let trailing: String?
     var downloadState: MediaAsset.DownloadState = .ready
+    /// Hidden when only browsing.
+    var showsSelection = true
+    /// A play button over the icon, to hear the first seconds of a song.
+    var preview: PreviewControl?
     let isSelected: Bool
     let action: () -> Void
 
@@ -213,21 +274,10 @@ struct LibraryRow: View {
                     Text(title)
                         .font(IrisFont.calloutEmphasized)
                         .foregroundStyle(IrisColor.textPrimary)
-                    Text(subtitle)
-                        .font(IrisFont.caption)
-                        .foregroundStyle(IrisColor.textTertiary)
-                    if let footnote {
-                        Text(footnote)
+                    if !subtitle.isEmpty {
+                        Text(subtitle)
                             .font(IrisFont.caption)
                             .foregroundStyle(IrisColor.textTertiary)
-                            .lineLimit(1)
-                    }
-                    if let preview {
-                        Text(preview)
-                            .font(.system(.callout, design: .serif))
-                            .italic()
-                            .foregroundStyle(IrisColor.textSecondary)
-                            .lineLimit(1)
                     }
                 }
 
@@ -242,7 +292,9 @@ struct LibraryRow: View {
                             .foregroundStyle(IrisColor.textSecondary)
                     }
 
-                    IrisCheckmark(isOn: isSelected)
+                    if showsSelection {
+                        IrisCheckmark(isOn: isSelected)
+                    }
                 }
             }
             .padding(IrisSpacing.md - 2)
@@ -256,9 +308,43 @@ struct LibraryRow: View {
             .contentShape(shape)
         }
         .buttonStyle(.irisPressable)
-        .disabled(downloadState != .ready)
-        .accessibilityElement(children: .combine)
+        .disabled(downloadState != .ready || !showsSelection)
+        // Outside the row's button, so playing never selects the song. It sits where the icon is.
+        .overlay(alignment: .leading) {
+            if let preview {
+                PreviewPlayButton(control: preview, tint: tint)
+                    .padding(.leading, IrisSpacing.md - 2)
+            }
+        }
+        .accessibilityElement(children: .contain)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+}
+
+/// What a row needs to preview its song.
+struct PreviewControl {
+    let player: MusicPreviewPlayer
+    let url: URL
+}
+
+/// Play / stop over a song's icon tile.
+struct PreviewPlayButton: View {
+    let control: PreviewControl
+    let tint: Color
+
+    var body: some View {
+        let isPlaying = control.player.isPlaying(control.url)
+        Button {
+            control.player.toggle(control.url)
+        } label: {
+            Image(systemName: isPlaying ? "stop.fill" : "play.fill")
+                .font(.system(.body, weight: .semibold))
+                .foregroundStyle(isPlaying ? IrisColor.canvas : tint)
+                .frame(width: 44, height: 44)
+                .background(isPlaying ? tint : tint.opacity(0.14), in: RoundedRectangle(cornerRadius: IrisRadius.sm, style: .continuous))
+        }
+        .buttonStyle(.irisPressable)
+        .accessibilityLabel(Text(isPlaying ? "Detener" : "Escuchar un momento"))
     }
 }
 
@@ -294,6 +380,8 @@ struct DownloadBadge: View {
 /// Grid tile for images and videos.
 struct LibraryMediaTile: View {
     let asset: MediaAsset
+    /// Hidden when only browsing.
+    var showsSelection = true
     let isSelected: Bool
     let action: () -> Void
 
@@ -306,7 +394,7 @@ struct LibraryMediaTile: View {
                     .aspectRatio(16 / 9, contentMode: .fit)
                     .clipShape(shape)
                     .overlay(alignment: .topTrailing) {
-                        if asset.isAvailable {
+                        if asset.isAvailable && showsSelection {
                             IrisCheckmark(isOn: isSelected)
                                 .padding(IrisSpacing.xs)
                         }
@@ -350,7 +438,7 @@ struct LibraryMediaTile: View {
             }
         }
         .buttonStyle(.irisPressable)
-        .disabled(!asset.isAvailable)
+        .disabled(!asset.isAvailable || !showsSelection)
         .accessibilityLabel(Text(asset.title))
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
@@ -367,6 +455,14 @@ struct LibraryMediaTile: View {
             }
         }
         .overlay {
+            // Songs are only an icon.
+            if asset.kind == .music {
+                Image(systemName: ServiceItem.Kind.music.systemImage)
+                    .font(.system(size: 34, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.85))
+            }
+        }
+        .overlay {
             if asset.kind == .video {
                 Image(systemName: "play.fill")
                     .font(.system(size: 18, weight: .bold))
@@ -380,12 +476,19 @@ struct LibraryMediaTile: View {
 
 extension AddToServiceViewModel {
     /// Loaded view model for previews, optionally on a given tab.
-    static func preview(tab: Tab = .lyrics, tabs: [Tab] = Tab.allCases) -> AddToServiceViewModel {
-        let viewModel = AddToServiceViewModel(repository: MockLibraryRepository(latency: .zero), tabs: tabs) { _ in }
-        viewModel.apply(lyrics: MockLibraryRepository.sampleLyrics, media: MockLibraryRepository.sampleMedia)
+    static func preview(tab: Tab = .lyrics, tabs: [Tab] = Tab.allCases, mode: Mode = .picker) -> AddToServiceViewModel {
+        let viewModel = AddToServiceViewModel(repository: MockLibraryRepository(latency: .zero), tabs: tabs, mode: mode)
+        let sample = MockLibraryRepository.sampleMedia
+        viewModel.apply(
+            lyrics: MockLibraryRepository.sampleLyrics,
+            music: sample.filter { $0.kind == .music },
+            media: sample.filter { $0.kind != .music }
+        )
         viewModel.tab = tab
-        if let first = MockLibraryRepository.sampleLyrics.first { viewModel.toggle(.lyric(first.id)) }
-        viewModel.toggle(.media("v2"))
+        if mode == .picker {
+            if let first = MockLibraryRepository.sampleLyrics.first { viewModel.toggle(.lyric(first.id)) }
+            viewModel.toggle(.media("v2"))
+        }
         return viewModel
     }
 }
@@ -404,8 +507,8 @@ extension AddToServiceViewModel {
         .preferredColorScheme(.dark)
 }
 
-#Preview("Videos") {
-    AddToServiceView(viewModel: .preview(tab: .videos))
+#Preview("Multimedia") {
+    AddToServiceView(viewModel: .preview(tab: .media))
         .frame(width: 900, height: 820)
         .background(IrisColor.canvasElevated)
         .preferredColorScheme(.dark)

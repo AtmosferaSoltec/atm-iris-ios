@@ -29,6 +29,7 @@ struct PermissionsTests {
         let console = LiveConsoleViewModel.makePreview(modules: ChurchModules())
         let consoleForRole = LiveConsoleViewModel(
             session: context, modules: ChurchModules(), servicePlanRepository: MockServicePlanRepository(latency: .zero),
+            projectionSettings: MockProjectionSettingsRepository(store: InMemoryChurchStore(), latency: .zero),
             backgroundRepository: MockBackgroundRepository(), bibleRepository: MockBibleRepository(), libraryRepository: MockLibraryRepository(),
             mediaPlayback: MockMediaPlaybackService(), displayOutput: MockDisplayOutputService(),
             serviceTypes: MockServiceTypeRepository(store: store, latency: .zero), peopleRepository: MockPeopleRepository(store: store, latency: .zero),

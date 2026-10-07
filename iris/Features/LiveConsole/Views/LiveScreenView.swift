@@ -8,9 +8,10 @@ import SwiftUI
 /// Mirror of what the TV is showing right now.
 struct LiveScreenView: View {
     let frame: ProjectionFrame
+    var typography = ProjectionSettings()
 
     var body: some View {
-        ProjectionCanvas(frame: frame, cornerRadius: IrisRadius.md)
+        ProjectionCanvas(frame: frame, cornerRadius: IrisRadius.md, typography: typography)
             .overlay {
                 RoundedRectangle(cornerRadius: IrisRadius.md, style: .continuous)
                     .strokeBorder(IrisColor.strokeStrong)
@@ -36,6 +37,9 @@ struct BackgroundPickerView: View {
             IrisSectionHeader("FONDOS")
 
             LazyVGrid(columns: columns, spacing: IrisSpacing.md) {
+                NoBackgroundSwatch(isSelected: viewModel.selectedBackgroundID == nil) {
+                    withAnimation(IrisMotion.smooth) { viewModel.selectBackground(nil) }
+                }
                 ForEach(viewModel.backgrounds) { background in
                     BackgroundSwatch(
                         background: background,
@@ -49,6 +53,34 @@ struct BackgroundPickerView: View {
         .padding(IrisSpacing.lg)
         .presentationCompactAdaptation(.popover)
         .presentationBackground(IrisColor.canvasElevated)
+    }
+}
+
+/// "Ninguno": pure black, chosen on purpose rather than left over by chance.
+struct NoBackgroundSwatch: View {
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: IrisSpacing.xs - 2) {
+                RoundedRectangle(cornerRadius: IrisRadius.sm - 2, style: .continuous)
+                    .fill(.black)
+                    .frame(width: 92, height: 52)
+                    .padding(3)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: IrisRadius.sm + 1, style: .continuous)
+                            .strokeBorder(isSelected ? IrisColor.textPrimary : .clear, lineWidth: 2)
+                    }
+
+                Text("Ninguno")
+                    .font(IrisFont.caption)
+                    .foregroundStyle(isSelected ? IrisColor.textPrimary : IrisColor.textTertiary)
+            }
+        }
+        .buttonStyle(.irisPressable)
+        .accessibilityLabel(Text("Ninguno: pantalla negra"))
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 

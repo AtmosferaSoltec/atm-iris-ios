@@ -93,7 +93,7 @@ struct LiveConsoleView: View {
 
             IrisSurface(padding: IrisSpacing.sm, cornerRadius: IrisRadius.xl) {
                 VStack(spacing: IrisSpacing.md) {
-                    LiveScreenView(frame: viewModel.liveFrame)
+                    LiveScreenView(frame: viewModel.liveFrame, typography: viewModel.typography)
                         .environment(\.projectionVideoPlayer, viewModel.videoPlayer)
 
                     if let playback = viewModel.playback {
@@ -203,6 +203,7 @@ extension LiveConsoleViewModel {
             modules: modules,
             people: people,
             servicePlanRepository: MockServicePlanRepository(latency: .zero),
+            projectionSettings: MockProjectionSettingsRepository(store: InMemoryChurchStore(), latency: .zero),
             backgroundRepository: MockBackgroundRepository(),
             bibleRepository: MockBibleRepository(),
             libraryRepository: MockLibraryRepository(),

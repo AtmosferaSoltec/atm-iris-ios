@@ -2,66 +2,77 @@
 //  ExternalDisplayScene.swift
 //  iris
 //
+//  The TV. Since iOS 27 the system gives an app the external screen (HDMI or AirPlay) only while the
+//  app registers a scene accessory for it; without one it mirrors the iPad, controls included.
+//  The app's root view registers it with `projectionOnExternalDisplay()`, so the TV shows only the projection.
+//
 
 import AVFoundation
+import OSLog
 import SwiftUI
 import UIKit
 
-/// Delegate of the non-interactive external display scene (HDMI or AirPlay in extended mode).
-/// It shows only the projection, full screen, without any controls.
-final class ExternalDisplaySceneDelegate: NSObject, UIWindowSceneDelegate {
-    var window: UIWindow?
+private let log = Logger(subsystem: "com.atm.iris", category: "TV")
 
-    func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
-        guard let windowScene = scene as? UIWindowScene else { return }
-        let window = UIWindow(windowScene: windowScene)
-        let host = UIHostingController(rootView: ExternalProjectionView(store: .shared))
-        host.view.backgroundColor = .black
-        window.rootViewController = host
-        window.isHidden = false
-        self.window = window
-        ProjectionStore.shared.display = Self.describe(windowScene)
-    }
-
-    func windowScene(
-        _ windowScene: UIWindowScene,
-        didUpdateEffectiveGeometry previousEffectiveGeometry: UIWindowScene.Geometry
-    ) {
-        ProjectionStore.shared.display = Self.describe(windowScene)
-    }
-
-    func sceneDidDisconnect(_ scene: UIScene) {
-        window = nil
-        ProjectionStore.shared.display = nil
-    }
-
-    /// "Pantalla externa · 1920 × 1080", or the AirPlay receiver's name when there is one.
-    private static func describe(_ scene: UIWindowScene) -> ExternalDisplay {
-        let size = scene.screen.nativeBounds.size
-        let route = AVAudioSession.sharedInstance().currentRoute.outputs
-            .first { $0.portType == .airPlay || $0.portType == .HDMI }
-        let name = route?.portType == .airPlay ? route?.portName : nil
-        return ExternalDisplay(
-            name: name ?? String(localized: "Pantalla externa"),
-            resolution: "\(Int(max(size.width, size.height))) × \(Int(min(size.width, size.height)))"
-        )
+extension View {
+    /// Offers the projection to the external display for as long as this view is on screen.
+    /// Attach it once, to the app's root view, so the TV never falls back to mirroring the iPad.
+    func projectionOnExternalDisplay(store: ProjectionStore = .shared) -> some View {
+        sceneAccessory {
+            ExternalNonInteractiveAccessory {
+                ExternalProjectionView(store: store)
+            }
+            // The system may withdraw the accessory (display unplugged, AirPlay stopped).
+            .onAvailabilityChange { isAvailable in
+                log.notice("Pantalla externa \(isAvailable ? "disponible" : "no disponible", privacy: .public)")
+                if !isAvailable { store.display = nil }
+            }
+        }
     }
 }
 
 /// The TV: black, the projection centered at 16:9 with the same cross-fade as the console.
+/// Non-interactive: everything is controlled from the iPad.
 struct ExternalProjectionView: View {
     let store: ProjectionStore
+
+    @Environment(\.displayScale) private var displayScale
 
     var body: some View {
         ZStack {
             Color.black
-            ProjectionCanvas(frame: store.frame, cornerRadius: 0, isAnimated: true)
+            ProjectionCanvas(frame: store.frame, cornerRadius: 0, isAnimated: true, typography: store.typography)
                 .environment(\.projectionVideoPlayer, store.videoPlayer)
                 .animation(IrisMotion.smooth, value: store.frame)
         }
         .ignoresSafeArea()
         .statusBarHidden()
         .persistentSystemOverlays(.hidden)
+        // Being drawn on the TV is what "connected" means for the console's TV chip.
+        .onGeometryChange(for: CGSize.self) { $0.size } action: { size in
+            let display = ExternalDisplay.describe(pointSize: size, scale: displayScale)
+            log.notice("Proyectando en \(display.name, privacy: .public) · \(display.resolution, privacy: .public)")
+            store.display = display
+        }
+        .onDisappear {
+            log.notice("La pantalla externa dejó de mostrar la proyección")
+            store.display = nil
+        }
+    }
+}
+
+extension ExternalDisplay {
+    /// "Pantalla externa · 1920 × 1080", or the AirPlay receiver's name when there is one.
+    static func describe(pointSize size: CGSize, scale: CGFloat) -> ExternalDisplay {
+        let route = AVAudioSession.sharedInstance().currentRoute.outputs
+            .first { $0.portType == .airPlay || $0.portType == .HDMI }
+        let name = route?.portType == .airPlay ? route?.portName : nil
+        let width = Int((max(size.width, size.height) * scale).rounded())
+        let height = Int((min(size.width, size.height) * scale).rounded())
+        return ExternalDisplay(
+            name: name ?? String(localized: "Pantalla externa"),
+            resolution: "\(width) × \(height)"
+        )
     }
 }
 

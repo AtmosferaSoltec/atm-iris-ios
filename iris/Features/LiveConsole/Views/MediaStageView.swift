@@ -10,6 +10,7 @@ import SwiftUI
 struct MediaStageView: View {
     let kind: ServiceItem.Kind
     let frame: ProjectionFrame
+    var typography = ProjectionSettings()
     let isActive: Bool
     let onPresent: () -> Void
 
@@ -20,7 +21,7 @@ struct MediaStageView: View {
             Spacer(minLength: 0)
 
             Button(action: onPresent) {
-                ProjectionCanvas(frame: frame, cornerRadius: IrisRadius.lg)
+                ProjectionCanvas(frame: frame, cornerRadius: IrisRadius.lg, typography: typography)
                     .overlay {
                         shape.strokeBorder(
                             isActive ? AnyShapeStyle(IrisGradient.accent) : AnyShapeStyle(IrisColor.stroke),

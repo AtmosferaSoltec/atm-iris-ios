@@ -32,6 +32,9 @@ final class InMemoryChurchStore {
     }
 
     var modules: ChurchModules
+    /// What exists in Iris; everything by default.
+    var availableModules = ChurchModules()
+    var projection = ProjectionSettings()
     var serviceTypes: [ServiceType]
     var people: [Person]
     /// Newest first.

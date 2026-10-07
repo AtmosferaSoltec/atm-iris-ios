@@ -29,6 +29,7 @@ struct LiveConsoleScreen: View {
                 modules: modules,
                 people: people,
                 servicePlanRepository: dependencies.servicePlanRepository,
+                projectionSettings: dependencies.projectionSettings,
                 backgroundRepository: dependencies.backgroundRepository,
                 bibleRepository: dependencies.bibleRepository,
                 libraryRepository: dependencies.libraryRepository,
@@ -46,5 +47,8 @@ struct LiveConsoleScreen: View {
 
     var body: some View {
         LiveConsoleView(viewModel: viewModel, onExit: onExit, onOpenTimes: onOpenTimes, account: account)
+            // The iPad must not lock in the middle of a service: the TV would go dark with it.
+            .onAppear { UIApplication.shared.isIdleTimerDisabled = true }
+            .onDisappear { UIApplication.shared.isIdleTimerDisabled = false }
     }
 }

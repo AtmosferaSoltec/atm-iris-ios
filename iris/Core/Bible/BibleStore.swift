@@ -44,9 +44,7 @@ actor BibleStore {
         self.client = client
         self.folder = folder
         self.now = now
-        availability = FileManager.default.fileExists(atPath: folder.appending(path: "\(code).meta.json").path)
-            ? .ready
-            : .needsConnection
+        availability = Self.hasCompleteCopy(in: folder, code: code) ? .ready : .needsConnection
     }
 
     // MARK: Availability
@@ -139,8 +137,11 @@ actor BibleStore {
         try JSONCoding.encoder.encode(download).write(to: textFile(version: download.version), options: .atomic)
         let metadata = Metadata(version: download.version, etag: etag, name: download.name)
         try JSONCoding.encoder.encode(metadata).write(to: metadataFile, options: .atomic)
+        // Compared by name, never by URL: on a device the listing comes back as `/private/var/…` while
+        // `folder` is `/var/…`, so comparing URLs deleted the text that had just been written.
+        let current = textFile(version: download.version).lastPathComponent
         for file in (try? manager.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
-        where file.lastPathComponent.hasPrefix("\(code)-v") && file != textFile(version: download.version) {
+        where file.lastPathComponent.hasPrefix("\(code)-v") && file.lastPathComponent != current {
             try? manager.removeItem(at: file)
         }
     }
@@ -151,9 +152,22 @@ actor BibleStore {
         return translations?.first { $0.code == code }?.sizeBytes
     }
 
+    /// The metadata of the copy on disk, only when its text is there too. A metadata file without its
+    /// text (left by an older build) counts as no copy, so the next `ensureAvailable` downloads it again.
     private func metadata() -> Metadata? {
-        guard let data = try? Data(contentsOf: metadataFile) else { return nil }
-        return try? JSONCoding.decoder.decode(Metadata.self, from: data)
+        Self.completeMetadata(in: folder, code: code)
+    }
+
+    private nonisolated static func completeMetadata(in folder: URL, code: String) -> Metadata? {
+        guard let data = try? Data(contentsOf: folder.appending(path: "\(code).meta.json")),
+              let metadata = try? JSONCoding.decoder.decode(Metadata.self, from: data),
+              FileManager.default.fileExists(atPath: folder.appending(path: "\(code)-v\(metadata.version).json").path)
+        else { return nil }
+        return metadata
+    }
+
+    private nonisolated static func hasCompleteCopy(in folder: URL, code: String) -> Bool {
+        completeMetadata(in: folder, code: code) != nil
     }
 
     private var metadataFile: URL { folder.appending(path: "\(code).meta.json") }

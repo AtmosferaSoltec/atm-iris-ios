@@ -16,10 +16,15 @@ struct LiveModuleSettingsRepository: ModuleSettingsRepository {
         await church().map { ChurchModules($0.modules) } ?? ChurchModules()
     }
 
+    func availableModules() async -> ChurchModules {
+        await church()?.availableModules.map(ChurchModules.init) ?? ChurchModules()
+    }
+
     func save(_ modules: ChurchModules) async throws {
         if let church = await church() {
             let updated = ChurchDTO(
                 id: church.id, name: church.name, timezone: church.timezone, modules: modules.dto,
+                availableModules: church.availableModules, projection: church.projection,
                 storage: church.storage, createdAt: church.createdAt, updatedAt: data.now()
             )
             try await data.store.upsert(.church, [(updated.id, updated.name.nameKey, updated)])
@@ -27,6 +32,35 @@ struct LiveModuleSettingsRepository: ModuleSettingsRepository {
         try await data.write(
             APIRequest(.put, "/church/modules", body: modules.dto),
             kind: .church, label: String(localized: "Módulos"), touching: [.church]
+        )
+    }
+
+    private func church() async -> ChurchDTO? {
+        await data.store.all(.church, as: ChurchDTO.self).first
+    }
+}
+
+struct LiveProjectionSettingsRepository: ProjectionSettingsRepository {
+    let data: LiveChurchData
+
+    func changes() -> AsyncStream<Void> { data.changes(of: [.church]) }
+
+    func settings() async throws -> ProjectionSettings {
+        await church().map { ProjectionSettings($0.projection) } ?? ProjectionSettings()
+    }
+
+    func save(_ settings: ProjectionSettings) async throws {
+        if let church = await church() {
+            let updated = ChurchDTO(
+                id: church.id, name: church.name, timezone: church.timezone, modules: church.modules,
+                availableModules: church.availableModules, projection: settings.dto,
+                storage: church.storage, createdAt: church.createdAt, updatedAt: data.now()
+            )
+            try await data.store.upsert(.church, [(updated.id, updated.name.nameKey, updated)])
+        }
+        try await data.write(
+            APIRequest(.put, "/church/projection", body: settings.dto),
+            kind: .church, label: String(localized: "Proyección"), touching: [.church]
         )
     }
 

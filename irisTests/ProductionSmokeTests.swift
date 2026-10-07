@@ -1,31 +1,29 @@
 //
-//  LiveAPIIntegrationTests.swift
+//  ProductionSmokeTests.swift
 //  irisTests
 //
-//  End-to-end against the local API (`pnpm start:dev` in ../atm-iris-api). Skipped when it is not running.
+//  The same end-to-end flow as `LiveAPIIntegrationTests`, against any server (the production API).
+//  Skipped unless the account comes from the environment, so no credentials live in the repo:
+//
+//    TEST_RUNNER_IRIS_LIVE_URL=https://iris-api.atmosferast.com/api/v1 \
+//    TEST_RUNNER_IRIS_LIVE_EMAIL=… TEST_RUNNER_IRIS_LIVE_PASSWORD=… \
+//    xcodebuild test -scheme iris -destination 'platform=iOS Simulator,name=iPad Pro 11-inch (M5)'
 //
 
 import Foundation
 import Testing
 @testable import iris
 
-nonisolated private let apiBaseURL = URL(string: "http://localhost:3020/api/v1")!
-
-nonisolated private var isAPIRunning: Bool {
-    var request = URLRequest(url: apiBaseURL.appending(path: "health"))
-    request.timeoutInterval = 2
-    let semaphore = DispatchSemaphore(value: 0)
-    nonisolated(unsafe) var isUp = false
-    URLSession.shared.dataTask(with: request) { _, response, _ in
-        isUp = (response as? HTTPURLResponse)?.statusCode == 200
-        semaphore.signal()
-    }.resume()
-    semaphore.wait()
-    return isUp
+nonisolated private enum LiveEnvironment {
+    static let values = ProcessInfo.processInfo.environment
+    static let url = values["IRIS_LIVE_URL"].flatMap(URL.init(string:))
+    static let email = values["IRIS_LIVE_EMAIL"]
+    static let password = values["IRIS_LIVE_PASSWORD"]
+    static var isConfigured: Bool { url != nil && email != nil && password != nil }
 }
 
-@Suite(.serialized, .enabled(if: isAPIRunning, "La API local no está corriendo"))
-struct LiveAPIIntegrationTests {
+@Suite(.serialized, .enabled(if: LiveEnvironment.isConfigured, "Falta IRIS_LIVE_URL, IRIS_LIVE_EMAIL o IRIS_LIVE_PASSWORD"))
+struct ProductionSmokeTests {
     private struct Stack {
         let auth: LiveAuthService
         let store: LocalStore
@@ -35,15 +33,16 @@ struct LiveAPIIntegrationTests {
     }
 
     private func signedIn() async throws -> (Stack, UserSession) {
-        let publicClient = APIClient(baseURL: apiBaseURL)
+        let baseURL = try #require(LiveEnvironment.url)
+        let publicClient = APIClient(baseURL: baseURL)
         let manager = AuthSessionManager(client: publicClient, tokenStore: InMemoryTokenStore(), sessionFile: nil)
         let client = APIClient(
-            baseURL: apiBaseURL,
+            baseURL: baseURL,
             tokenProvider: { await manager.currentAccessToken() },
             onUnauthorized: { await manager.handleUnauthorized() }
         )
         let auth = LiveAuthService(manager: manager, publicClient: publicClient, client: client, deviceName: "Pruebas iPad")
-        let session = try await auth.signIn(SignInCredentials(email: "pastor@vidanueva.org", password: "vidanueva123"))
+        let session = try await auth.signIn(SignInCredentials(email: try #require(LiveEnvironment.email), password: try #require(LiveEnvironment.password)))
         let store = try LocalStore.inMemory()
         let changes = ChurchDataChanges()
         let outbox = Outbox(store: store, client: client)
@@ -51,19 +50,11 @@ struct LiveAPIIntegrationTests {
         return (Stack(auth: auth, store: store, sync: sync, data: LiveChurchData(store: store, outbox: outbox, sync: sync, changes: changes), client: client), session)
     }
 
-    @Test func wrongPasswordShowsTheAPIMessage() async throws {
-        let publicClient = APIClient(baseURL: apiBaseURL)
-        let auth = LiveAuthService(
-            manager: AuthSessionManager(client: publicClient, tokenStore: InMemoryTokenStore(), sessionFile: nil),
-            publicClient: publicClient, client: publicClient, deviceName: "Pruebas iPad"
-        )
-        do {
-            _ = try await auth.signIn(SignInCredentials(email: "pastor@vidanueva.org", password: "incorrecta-123"))
-            Issue.record("El login con contraseña incorrecta no falló")
-        } catch let error as AuthError {
-            #expect(error.code == "INVALID_CREDENTIALS")
-            #expect(!(error.errorDescription ?? "").isEmpty)
-        }
+    @Test func signInGivesAnAccountWithoutRolesOrChurchList() async throws {
+        let (_, session) = try await signedIn()
+        #expect(!session.church.name.isEmpty)
+        #expect(session.churches.isEmpty)
+        #expect(session.permissions == Set(Permission.allCases))
     }
 
     @Test func firstSyncCopiesTheChurch() async throws {
@@ -83,7 +74,7 @@ struct LiveAPIIntegrationTests {
         #expect(localSongs.count == songs.meta.total)
     }
 
-    @Test func personAddedLocallyReachesTheAPIOnce() async throws {
+    @Test func personAddedLocallyReachesTheAPIOnceAndIsRemoved() async throws {
         let (stack, session) = try await signedIn()
         await stack.sync.start(session: session)
         let people = LivePeopleRepository(data: stack.data)

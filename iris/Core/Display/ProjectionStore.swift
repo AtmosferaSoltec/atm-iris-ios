@@ -15,6 +15,8 @@ final class ProjectionStore {
     var frame: ProjectionFrame = .black
     /// Set while a video plays; the external scene draws it inside the canvas.
     var videoPlayer: AVPlayer?
+    /// How the projected lyrics look (contract §6); the console and the TV both read this.
+    var typography = ProjectionSettings()
     /// The connected external screen, `nil` without one.
     var display: ExternalDisplay? {
         didSet {
@@ -50,4 +52,8 @@ struct LiveDisplayOutputService: DisplayOutputService {
     }
 
     var videoPlayer: AVPlayer? { store.videoPlayer }
+
+    func setTypography(_ typography: ProjectionSettings) {
+        store.typography = typography
+    }
 }

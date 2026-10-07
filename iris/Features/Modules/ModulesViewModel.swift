@@ -22,22 +22,54 @@ final class ModulesViewModel {
 
     private(set) var isLoading = true
     private(set) var modules = ChurchModules()
+    /// What exists in Iris today; a module switched off for all of Iris is not listed.
+    private(set) var available = ChurchModules()
     private(set) var errorMessage: String?
     /// The latest write, so callers and tests can wait for it.
     private(set) var saveTask: Task<Void, Never>?
 
+    /// Built and shown when "Proyección" is tapped.
+    var projectionSheet: ProjectionSettingsViewModel?
+
     private let repository: any ModuleSettingsRepository
+    private let projectionSettings: any ProjectionSettingsRepository
+    private let backgroundRepository: any BackgroundRepository
     private let context: SessionContext
 
-    init(moduleSettings: any ModuleSettingsRepository, session: SessionContext = .preview) {
+    init(
+        moduleSettings: any ModuleSettingsRepository,
+        projectionSettings: any ProjectionSettingsRepository = MockProjectionSettingsRepository(store: InMemoryChurchStore()),
+        backgroundRepository: any BackgroundRepository = MockBackgroundRepository(),
+        session: SessionContext = .preview
+    ) {
         repository = moduleSettings
+        self.projectionSettings = projectionSettings
+        self.backgroundRepository = backgroundRepository
         context = session
+    }
+
+    func presentProjectionSettings() {
+        projectionSheet = ProjectionSettingsViewModel(
+            repository: projectionSettings, backgroundRepository: backgroundRepository, session: context
+        )
     }
 
     /// Only roles with `modules.manage` can flip the switches; the rest see them disabled.
     var canManage: Bool { context.can(.modulesManage) }
 
     // MARK: Derived
+
+    /// The switches on screen: Letras and whatever Iris offers today.
+    var visibleModules: [Module] {
+        Module.allCases.filter { module in
+            switch module {
+            case .lyrics: true
+            case .bible: available.bible
+            case .multimedia: available.multimedia
+            case .timeControl: available.timeControl
+            }
+        }
+    }
 
     func isOn(_ module: Module) -> Bool {
         switch module {
@@ -56,6 +88,7 @@ final class ModulesViewModel {
     /// Follows changes from a sync while the screen is open, until the calling task is cancelled.
     func observeChanges() async {
         for await _ in repository.changes() {
+            available = await repository.availableModules()
             if let modules = try? await repository.modules(), saveTask == nil || modules == self.modules {
                 self.modules = modules
             }
@@ -65,6 +98,7 @@ final class ModulesViewModel {
     func load() async {
         guard isLoading else { return }
         do {
+            available = await repository.availableModules()
             apply(modules: try await repository.modules())
         } catch {
             errorMessage = String(localized: "Algo salió mal. Inténtalo de nuevo.")

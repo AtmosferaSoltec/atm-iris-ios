@@ -10,15 +10,18 @@ import Observation
 final class HomeViewModel {
     struct LibraryCounts: Equatable {
         var lyrics = 0
+        /// Songs in the "Música" folder of this iPad.
         var music = 0
-        var images = 0
-        var videos = 0
+        /// Images, videos and audio uploaded on the web.
+        var media = 0
     }
 
     // MARK: State
 
     private(set) var isLoading = true
     private(set) var modules = ChurchModules()
+    /// What exists in Iris today; the Módulos tile does not list what is switched off for everyone.
+    private(set) var availableModules = ChurchModules()
     private(set) var serviceTypes: [ServiceType] = []
     private(set) var people: [Person] = []
     private(set) var recordCount = 0
@@ -191,14 +194,14 @@ final class HomeViewModel {
     func load() async {
         guard isLoading else { return }
         modules = (try? await moduleSettings.modules()) ?? ChurchModules()
+        availableModules = await moduleSettings.availableModules()
         let types = (try? await serviceTypeRepository.serviceTypes()) ?? []
         let people = (try? await peopleRepository.people()) ?? []
         let recordCount = (try? await timeRecords.records().count) ?? 0
         let library = LibraryCounts(
             lyrics: (try? await libraryRepository.lyrics().count) ?? 0,
-            music: (try? await libraryRepository.media(of: .music).count) ?? 0,
-            images: (try? await libraryRepository.media(of: .image).count) ?? 0,
-            videos: (try? await libraryRepository.media(of: .video).count) ?? 0
+            music: await libraryRepository.localMusic().count,
+            media: await libraryRepository.uploadedMedia().count
         )
         let display = await displayOutput.connectedDisplay()
         apply(modules: modules, serviceTypes: types, people: people, recordCount: recordCount, library: library, display: display)
@@ -211,6 +214,7 @@ final class HomeViewModel {
         if let modules = try? await moduleSettings.modules() {
             self.modules = modules
         }
+        availableModules = await moduleSettings.availableModules()
         let types = try? await serviceTypeRepository.serviceTypes()
         let people = try? await peopleRepository.people()
         let recordCount = try? await timeRecords.records().count
@@ -227,9 +231,8 @@ final class HomeViewModel {
     private func refreshLibrary() async {
         library = LibraryCounts(
             lyrics: (try? await libraryRepository.lyrics().count) ?? library.lyrics,
-            music: (try? await libraryRepository.media(of: .music).count) ?? library.music,
-            images: (try? await libraryRepository.media(of: .image).count) ?? library.images,
-            videos: (try? await libraryRepository.media(of: .video).count) ?? library.videos
+            music: await libraryRepository.localMusic().count,
+            media: await libraryRepository.uploadedMedia().count
         )
     }
 
@@ -263,6 +266,10 @@ final class HomeViewModel {
 
     func openServices() {
         onNavigate(.services)
+    }
+
+    func openLibrary() {
+        onNavigate(.library)
     }
 
     func openModules() {

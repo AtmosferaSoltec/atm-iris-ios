@@ -34,8 +34,11 @@ struct ContractDecodingTests {
     @Test func unknownEnumValuesAreTolerated() throws {
         let result = try decode(ContractSamples.authResult(role: "superadmin"), as: AuthResultDTO.self)
         #expect(result.role == .unknown)
-        // Unknown roles get the narrowest view; permissions still decide.
-        #expect(try UserSession(result.sessionView).role == .operator)
+        // One account per church: whatever role an older server sends, the account can do everything.
+        let session = try UserSession(result.sessionView)
+        #expect(session.role == .owner)
+        #expect(session.permissions == Set(Permission.allCases))
+        #expect(session.churches.isEmpty)
         #expect(try JSONCoding.decoder.decode(MediaKindDTO.self, from: Data("\"document\"".utf8)) == .unknown)
     }
 

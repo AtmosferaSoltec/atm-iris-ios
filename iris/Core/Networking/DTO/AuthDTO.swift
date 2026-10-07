@@ -39,27 +39,45 @@ nonisolated struct SessionViewDTO: Codable, Hashable, Sendable {
 
     let user: User
     let church: Church
-    let role: RoleDTO
-    let permissions: [String]
-    let churches: [ChurchSummaryDTO]
     let session: Session
+    // The v1 API has one account per church: no roles, permissions or church list.
+    // Kept optional only so older stored sessions and older servers still decode.
+    let role: RoleDTO?
+    let permissions: [String]?
+    let churches: [ChurchSummaryDTO]?
+
+    init(
+        user: User,
+        church: Church,
+        session: Session,
+        role: RoleDTO? = nil,
+        permissions: [String]? = nil,
+        churches: [ChurchSummaryDTO]? = nil
+    ) {
+        self.user = user
+        self.church = church
+        self.session = session
+        self.role = role
+        self.permissions = permissions
+        self.churches = churches
+    }
 }
 
 /// `SessionView & tokens`.
 nonisolated struct AuthResultDTO: Codable, Hashable, Sendable {
     let user: SessionViewDTO.User
     let church: SessionViewDTO.Church
-    let role: RoleDTO
-    let permissions: [String]
-    let churches: [ChurchSummaryDTO]
     let session: SessionViewDTO.Session
+    let role: RoleDTO?
+    let permissions: [String]?
+    let churches: [ChurchSummaryDTO]?
     let accessToken: String
     let accessTokenExpiresAt: Date
     let refreshToken: String
     let refreshTokenExpiresAt: Date
 
     var sessionView: SessionViewDTO {
-        SessionViewDTO(user: user, church: church, role: role, permissions: permissions, churches: churches, session: session)
+        SessionViewDTO(user: user, church: church, session: session, role: role, permissions: permissions, churches: churches)
     }
 }
 

@@ -53,11 +53,11 @@ nonisolated extension UserSession {
                 name: dto.church.name,
                 timeZone: TimeZone(identifier: dto.church.timezone) ?? TimeZone(identifier: "America/Lima") ?? .current
             ),
-            role: Role(dto.role),
-            permissions: Set(dto.permissions.compactMap(Permission.init(rawValue:))),
-            churches: try dto.churches.map {
-                ChurchSummary(id: try UUID(apiID: $0.id), name: $0.name, role: Role($0.role))
-            },
+            // One account per church (contract §3): everyone can do everything and there
+            // is no church to switch to, whatever an older server still sends.
+            role: .owner,
+            permissions: Set(Permission.allCases),
+            churches: [],
             sessionID: try UUID(apiID: dto.session.id),
             platform: Platform(dto.session.platform)
         )
@@ -73,6 +73,23 @@ nonisolated extension ChurchModules {
 
     var dto: ChurchModulesDTO {
         ChurchModulesDTO(bible: bible, multimedia: multimedia, timeControl: timeControl)
+    }
+}
+
+nonisolated extension ProjectionSettings {
+    init(_ dto: ProjectionSettingsDTO?) {
+        guard let dto else { self.init(); return }
+        self.init(
+            fontFamily: ProjectionFontFamily(apiValue: dto.fontFamily),
+            fontSizePt: dto.fontSizePt,
+            defaultBackgroundId: dto.defaultBackgroundId
+        )
+    }
+
+    var dto: ProjectionSettingsDTO {
+        ProjectionSettingsDTO(
+            fontFamily: fontFamily.rawValue, fontSizePt: fontSizePt, defaultBackgroundId: defaultBackgroundId
+        )
     }
 }
 

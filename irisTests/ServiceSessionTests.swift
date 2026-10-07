@@ -35,6 +35,7 @@ struct ServiceSessionTests {
             modules: modules,
             people: store.people,
             servicePlanRepository: FailingPlanRepository(),
+            projectionSettings: MockProjectionSettingsRepository(store: store, latency: .zero),
             backgroundRepository: MockBackgroundRepository(),
             bibleRepository: MockBibleRepository(),
             libraryRepository: MockLibraryRepository(latency: .zero),
@@ -69,7 +70,8 @@ struct ServiceSessionTests {
         #expect(viewModel.serviceTitle == "Culto general")
         #expect(viewModel.selectedItemID == nil)
         #expect(viewModel.liveFrame.content == .blank)
-        #expect(viewModel.selectedBackground == MockBackgroundRepository.sample.first)
+        // Nothing configured in Proyección: a new service opens on black, not the first gradient.
+        #expect(viewModel.selectedBackground == nil)
         #expect(viewModel.service?.date == clock.now)
     }
 

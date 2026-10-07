@@ -57,6 +57,10 @@ final class LiveConsoleViewModel {
     private(set) var service: ServicePlan?
     private(set) var backgrounds: [ProjectionBackground] = []
     private(set) var display: ExternalDisplay?
+    /// How the projected lyrics look; loaded once at start, same for every console (contract §6).
+    private(set) var typography = ProjectionSettings()
+    /// Shown whenever no background is chosen (`selectedBackgroundID == nil`); `nil` means black.
+    private(set) var defaultBackground: ProjectionBackground?
 
     /// Item open in the workspace (may differ from what is on the TV).
     private(set) var selectedItemID: ServiceItem.ID?
@@ -112,6 +116,7 @@ final class LiveConsoleViewModel {
     // MARK: Dependencies
 
     private let servicePlanRepository: any ServicePlanRepository
+    private let projectionSettings: any ProjectionSettingsRepository
     private let backgroundRepository: any BackgroundRepository
     private let bibleRepository: any BibleRepository
     private let libraryRepository: any LibraryRepository
@@ -128,6 +133,7 @@ final class LiveConsoleViewModel {
         modules: ChurchModules,
         people: [Person] = [],
         servicePlanRepository: any ServicePlanRepository,
+        projectionSettings: any ProjectionSettingsRepository,
         backgroundRepository: any BackgroundRepository,
         bibleRepository: any BibleRepository,
         libraryRepository: any LibraryRepository,
@@ -143,6 +149,7 @@ final class LiveConsoleViewModel {
         self.modules = modules
         self.people = people
         self.servicePlanRepository = servicePlanRepository
+        self.projectionSettings = projectionSettings
         self.backgroundRepository = backgroundRepository
         self.bibleRepository = bibleRepository
         self.libraryRepository = libraryRepository
@@ -244,15 +251,22 @@ final class LiveConsoleViewModel {
                 plan = try await servicePlanRepository.currentService()
             }
             let backgrounds = try await backgroundRepository.backgrounds()
+            // A church that hasn't set one up yet just gets `ProjectionSettings()` (system/88/none).
+            let typography = (try? await projectionSettings.settings()) ?? ProjectionSettings()
             let display = await displayOutput.connectedDisplay()
-            apply(plan: plan, backgrounds: backgrounds, display: display)
+            apply(plan: plan, backgrounds: backgrounds, display: display, typography: typography)
         } catch {
             phase = .failed(String(localized: "No pudimos cargar el servicio."))
         }
     }
 
     /// Installs loaded data. Also used by previews to start in a loaded state.
-    func apply(plan: ServicePlan, backgrounds: [ProjectionBackground], display: ExternalDisplay?) {
+    func apply(
+        plan: ServicePlan,
+        backgrounds: [ProjectionBackground],
+        display: ExternalDisplay?,
+        typography: ProjectionSettings = ProjectionSettings()
+    ) {
         var plan = plan
         if !modules.multimedia {
             plan.items.removeAll { [.music, .image, .video].contains($0.kind) }
@@ -260,7 +274,13 @@ final class LiveConsoleViewModel {
         self.service = plan
         self.backgrounds = backgrounds
         self.display = display
-        selectedBackgroundID = backgrounds.first?.id
+        self.typography = typography
+        displayOutput.setTypography(typography)
+        // A new service starts exactly as the church set up in Proyección: the configured image or
+        // gradient if there is one, pure black otherwise — never the first background by chance.
+        selectedBackgroundID = typography.defaultBackgroundId.flatMap { id in
+            backgrounds.first { $0.id == id }?.id
+        }
 
         // Demo state: second item open, its second slide on screen.
         let opening = plan.items.dropFirst().first ?? plan.items.first
@@ -318,7 +338,8 @@ final class LiveConsoleViewModel {
         isPickingBackground = true
     }
 
-    func selectBackground(_ id: ProjectionBackground.ID) {
+    /// `nil` is "Ninguno": pure black, chosen on purpose rather than the absence of a choice.
+    func selectBackground(_ id: ProjectionBackground.ID?) {
         selectedBackgroundID = id
         isPickingBackground = false
         pushOutput()

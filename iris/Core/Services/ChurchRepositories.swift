@@ -10,7 +10,27 @@ protocol ModuleSettingsRepository {
     /// Yields when the local copy of this data changes (a sync, another screen).
     func changes() -> AsyncStream<Void>
     func modules() async throws -> ChurchModules
+    /// Modules that exist in Iris today. One switched off for all of Iris is not offered at all,
+    /// not even in Módulos (contract §6).
+    func availableModules() async -> ChurchModules
     func save(_ modules: ChurchModules) async throws
+}
+
+extension ModuleSettingsRepository {
+    func availableModules() async -> ChurchModules { ChurchModules() }
+}
+
+/// How the projected lyrics look: typeface, size and the background shown when none is chosen.
+/// Same settings for every console of the church (contract §6).
+protocol ProjectionSettingsRepository {
+    /// Yields when the local copy of this data changes (a sync, another screen).
+    func changes() -> AsyncStream<Void>
+    func settings() async throws -> ProjectionSettings
+    func save(_ settings: ProjectionSettings) async throws
+}
+
+extension ProjectionSettingsRepository {
+    func changes() -> AsyncStream<Void> { .finished }
 }
 
 /// Service types and their optional timed blocks.

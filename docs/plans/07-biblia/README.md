@@ -41,3 +41,11 @@ Fase 01 (sesión). Independiente de la sincronización.
   Abrir el selector antes de que termine la descarga en segundo plano se suma a esa misma descarga.
 - La fecha de la última comprobación se guarda en `SyncState.bibleCheckedAt` de la copia local.
 - La API todavía no tiene el módulo `/bible`: la prueba con Juan 3:16 queda para la fase 10.
+
+- **Apagada para todo Iris (2026-10-07)**: la tabla `system_features` de la API tiene la Biblia en `false` mientras se
+  resuelve la licencia de una versión en español. La API manda `modules.bible = false` y `availableModules.bible = false`
+  (contrato §6) y sus rutas responden 404. El iPad no la ofrece: sin botón en la consola, sin interruptor en Módulos ni
+  fila en el tile de Inicio, y no la descarga. El código queda intacto: al encenderla en la base vuelve sola.
+- **Copia incompleta (corregido el 2026-10-07)**: `BibleStore.save` comparaba URLs al limpiar versiones viejas y en el
+  dispositivo (`/var` frente a `/private/var`) borraba el texto recién escrito; quedaba el `meta.json` sin texto y la
+  lista de libros vacía. Ahora compara por nombre, y un `meta.json` sin su texto cuenta como "no descargada".

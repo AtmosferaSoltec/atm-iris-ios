@@ -18,9 +18,26 @@ struct MockModuleSettingsRepository: ModuleSettingsRepository {
         return store.modules
     }
 
+    func availableModules() async -> ChurchModules { store.availableModules }
+
     func save(_ modules: ChurchModules) async throws {
         try await Task.sleep(for: latency)
         store.modules = modules
+    }
+}
+
+struct MockProjectionSettingsRepository: ProjectionSettingsRepository {
+    let store: InMemoryChurchStore
+    var latency: Duration = .milliseconds(250)
+
+    func settings() async throws -> ProjectionSettings {
+        try await Task.sleep(for: latency)
+        return store.projection
+    }
+
+    func save(_ settings: ProjectionSettings) async throws {
+        try await Task.sleep(for: latency)
+        store.projection = settings
     }
 }
 

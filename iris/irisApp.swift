@@ -30,27 +30,16 @@ struct irisApp: App {
                 }
             }
             .frame(minWidth: IrisSize.minimumWindow.width, minHeight: IrisSize.minimumWindow.height)
+            // The TV shows only the projection, never the iPad's screen (iOS 27 scene accessory).
+            .projectionOnExternalDisplay()
         }
         .windowResizability(.contentMinSize)
     }
 }
 
-/// Lets background media downloads finish while the app is suspended, and gives the TV its own scene.
+/// Lets background media downloads finish while the app is suspended.
+/// The TV is not here: since iOS 27 it is a scene accessory registered by the root view.
 final class IrisAppDelegate: NSObject, UIApplicationDelegate {
-    func application(
-        _ application: UIApplication,
-        configurationForConnecting connectingSceneSession: UISceneSession,
-        options: UIScene.ConnectionOptions
-    ) -> UISceneConfiguration {
-        if connectingSceneSession.role == .windowExternalDisplayNonInteractive {
-            let configuration = UISceneConfiguration(name: "TV", sessionRole: connectingSceneSession.role)
-            configuration.delegateClass = ExternalDisplaySceneDelegate.self
-            return configuration
-        }
-        // Everything else is SwiftUI's own window.
-        return UISceneConfiguration(name: nil, sessionRole: connectingSceneSession.role)
-    }
-
     func application(
         _ application: UIApplication,
         handleEventsForBackgroundURLSession identifier: String,

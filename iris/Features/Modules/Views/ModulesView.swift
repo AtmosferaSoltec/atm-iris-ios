@@ -32,6 +32,7 @@ struct ModulesView: View {
                             }
                             moduleList
                                 .disabled(!viewModel.canManage)
+                            projectionRow
                         }
                     }
                     .frame(maxWidth: IrisSize.settingsColumnWidth)
@@ -45,11 +46,43 @@ struct ModulesView: View {
         }
         .task { await viewModel.load() }
         .task { await viewModel.observeChanges() }
+        .sheet(item: $viewModel.projectionSheet) { ProjectionSettingsView(viewModel: $0) }
+    }
+
+    /// Opens the typeface, size and default-background settings of the projected lyrics.
+    private var projectionRow: some View {
+        Button {
+            viewModel.presentProjectionSettings()
+        } label: {
+            HStack(spacing: IrisSpacing.md) {
+                Image(systemName: "textformat.size")
+                    .font(.system(.body, weight: .semibold))
+                    .foregroundStyle(IrisColor.violet)
+                    .frame(width: 40, height: 40)
+                    .background(IrisColor.violet.opacity(0.14), in: RoundedRectangle(cornerRadius: IrisRadius.sm, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Proyección")
+                        .font(IrisFont.bodyEmphasized)
+                        .foregroundStyle(IrisColor.textPrimary)
+                    Text("Tipografía, tamaño y fondo por defecto de la letra.")
+                        .font(IrisFont.callout)
+                        .foregroundStyle(IrisColor.textSecondary)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.system(.footnote, weight: .semibold))
+                    .foregroundStyle(IrisColor.textTertiary)
+            }
+            .padding(.top, IrisSpacing.lg)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     private var header: some View {
         VStack(alignment: .leading, spacing: IrisSpacing.xs) {
-            Text("Módulos")
+            Text("Configuración")
                 .font(IrisFont.headline)
                 .tracking(IrisTracking.tight)
                 .foregroundStyle(IrisColor.textPrimary)
@@ -61,8 +94,8 @@ struct ModulesView: View {
 
     private var moduleList: some View {
         VStack(spacing: 0) {
-            ForEach(ModulesViewModel.Module.allCases) { module in
-                if module != ModulesViewModel.Module.allCases.first {
+            ForEach(viewModel.visibleModules) { module in
+                if module != viewModel.visibleModules.first {
                     Divider()
                         .overlay(IrisColor.stroke)
                 }
