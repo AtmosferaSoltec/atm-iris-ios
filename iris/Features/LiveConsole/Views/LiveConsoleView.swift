@@ -31,6 +31,7 @@ struct LiveConsoleView: View {
         .task { await viewModel.load() }
         .task { await viewModel.runPlaybackClock() }
         .task { await viewModel.runBlockClock() }
+        .task { await viewModel.runCountdownClock() }
         .task { await viewModel.observeDisplay() }
         .task { await viewModel.observeLibrary() }
         .alert("El servicio sigue en curso", isPresented: $viewModel.isConfirmingExit) {

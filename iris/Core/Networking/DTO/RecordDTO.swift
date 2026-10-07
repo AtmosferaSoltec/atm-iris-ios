@@ -81,6 +81,7 @@ nonisolated struct SyncPageDTO: Codable, Hashable, Sendable {
         let songs: [SongDTO]
         let media: [MediaAssetDTO]
         let serviceRecords: [ServiceRecordDTO]
+        let servicePlan: [ServicePlanItemDTO]
     }
 
     nonisolated struct Deleted: Codable, Hashable, Sendable {
@@ -89,6 +90,7 @@ nonisolated struct SyncPageDTO: Codable, Hashable, Sendable {
         let songs: [String]
         let media: [String]
         let serviceRecords: [String]
+        let servicePlan: [String]
     }
 
     let church: ChurchDTO?

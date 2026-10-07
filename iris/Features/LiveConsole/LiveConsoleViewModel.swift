@@ -77,6 +77,16 @@ final class LiveConsoleViewModel {
     var biblePicker: BiblePickerViewModel?
     var addSheet: AddToServiceViewModel?
 
+    // MARK: Countdown ("Temporizador")
+
+    /// The toolbar countdown; it takes the TV while it counts (see `liveFrame`), unless the screen is cleared.
+    private(set) var countdown = CountdownTimer()
+    var customCountdownMinutes: Double = 10
+    private(set) var showsCountdownOnTv = true
+    var isPickingCountdown = false
+
+    static let countdownPresets = [5, 10, 15, 20, 30, 45, 60]
+
     /// Passage opened from the Bible picker, shown in the workspace like a service item.
     private(set) var scriptureItem: ServiceItem?
 
@@ -224,13 +234,37 @@ final class LiveConsoleViewModel {
 
     var accountInitials: String { session.churchInitials }
 
-    /// The frame currently on the TV.
+    /// The frame currently on the TV; the countdown takes over the slide while it counts.
     var liveFrame: ProjectionFrame {
+        if !isScreenCleared, let timer = countdownTvContent {
+            return ProjectionFrame(background: selectedBackground, content: timer)
+        }
         guard !isScreenCleared, let liveSlide else {
             return ProjectionFrame(background: selectedBackground, content: .blank)
         }
         return ProjectionFrame(background: selectedBackground, content: projectionContent(for: liveSlide))
     }
+
+    private var countdownTvContent: ProjectionFrame.Content? {
+        guard countdown.isActive, showsCountdownOnTv else { return nil }
+        return .timer(text: countdownRemainingText, isFinished: countdown.isFinished)
+    }
+
+    // MARK: Countdown: derived text
+
+    var countdownRemainingText: String { CountdownTimer.format(countdown.remaining(now: clock())) }
+
+    var countdownButtonText: String { countdown.isActive ? "Temporizador · \(countdownRemainingText)" : "Temporizador" }
+
+    var countdownStatusText: String {
+        countdown.isFinished ? "¡Tiempo terminado!" : countdown.isPaused ? "En pausa" : "Tiempo restante"
+    }
+
+    var countdownPauseButtonText: String { countdown.isPaused ? "Reanudar" : "Pausar" }
+
+    var countdownTvButtonText: String { showsCountdownOnTv ? "Ocultar del TV" : "Mostrar en el TV" }
+
+    var canPauseCountdown: Bool { countdown.isRunning || countdown.isPaused }
 
     /// Plain black card used in the workspace.
     func cardFrame(for slide: Slide) -> ProjectionFrame {
@@ -252,13 +286,10 @@ final class LiveConsoleViewModel {
         guard phase != .loaded else { return }
         phase = .loading
         do {
-            // A service started from Home begins with an empty list; the sample plan is for previews.
-            let plan: ServicePlan
-            if let serviceType {
-                plan = ServicePlan(id: UUID(), title: serviceType.name, date: clock(), items: [])
-            } else {
-                plan = try await servicePlanRepository.currentService()
-            }
+            // Whatever the web (or another console) adelantó, regardless of service type (contract
+            // §15); a service with nothing adelantado still starts blank, same as always.
+            var plan = try await servicePlanRepository.currentService()
+            if let serviceType { plan.title = serviceType.name }
             let backgrounds = try await backgroundRepository.backgrounds()
             // A church that hasn't set one up yet just gets `ProjectionSettings()` (system/88/none).
             let typography = (try? await projectionSettings.settings()) ?? ProjectionSettings()
@@ -345,6 +376,59 @@ final class LiveConsoleViewModel {
 
     func presentBackgroundPicker() {
         isPickingBackground = true
+    }
+
+    // MARK: Countdown actions
+
+    func presentCountdownPicker() {
+        isPickingCountdown = true
+    }
+
+    func startCountdown(minutes: Int) {
+        guard minutes >= 1 else { return }
+        countdown.start(duration: TimeInterval(minutes * 60), now: clock())
+        showsCountdownOnTv = true
+        pushOutput()
+    }
+
+    func startCustomCountdown() {
+        let minutes = Int(customCountdownMinutes)
+        guard minutes >= 1 else { return }
+        startCountdown(minutes: min(minutes, CountdownTimer.maxMinutes))
+    }
+
+    func toggleCountdownPause() {
+        if countdown.isPaused {
+            countdown.resume(now: clock())
+        } else {
+            countdown.pause(now: clock())
+        }
+        pushOutput()
+    }
+
+    func addCountdownMinute() {
+        countdown.add(60, now: clock())
+        pushOutput()
+    }
+
+    func toggleCountdownTv() {
+        showsCountdownOnTv.toggle()
+        pushOutput()
+    }
+
+    func stopCountdown() {
+        countdown.stop()
+        pushOutput()
+    }
+
+    /// Ticks the countdown until the calling task is cancelled.
+    func runCountdownClock() async {
+        while !Task.isCancelled {
+            try? await Task.sleep(for: .seconds(0.2))
+            guard countdown.isRunning else { continue }
+            countdown.tick(now: clock())
+            pushOutput()
+        }
     }
 
     /// `nil` is "Ninguno": pure black, chosen on purpose rather than the absence of a choice.
@@ -455,6 +539,7 @@ final class LiveConsoleViewModel {
         service?.items.append(contentsOf: items)
         selectedItemID = items.first?.id
         addSheet = nil
+        persistAdditions(items)
 
         let missing = items.filter { $0.mediaID != nil && $0.slides.first?.content.url == nil }
         guard !missing.isEmpty else { return }
@@ -502,14 +587,22 @@ final class LiveConsoleViewModel {
 
         recentlyRemoved = RemovedItem(item: removed, index: index)
         scheduleUndoDismissal()
+
+        if let planItemID = removed.planItemID {
+            let repository = servicePlanRepository
+            Task { try? await repository.remove(planItemID, label: removed.title) }
+        }
     }
 
     func undoRemoval() {
         guard let recentlyRemoved else { return }
-        service?.items.insert(recentlyRemoved.item, at: min(recentlyRemoved.index, items.count))
-        selectedItemID = recentlyRemoved.item.id
+        let item = recentlyRemoved.item
+        service?.items.insert(item, at: min(recentlyRemoved.index, items.count))
+        selectedItemID = item.id
         self.recentlyRemoved = nil
         undoDismissTask?.cancel()
+        // The row removed above is already gone from the plan; adelantarlo again gets a new one.
+        persistAdditions([item])
     }
 
     func duplicateItem(_ id: ServiceItem.ID) {
@@ -519,10 +612,13 @@ final class LiveConsoleViewModel {
             kind: original.kind,
             title: original.title,
             subtitle: original.subtitle,
-            slides: original.slides.map { Slide(label: $0.label, content: $0.content) }
+            slides: original.slides.map { Slide(label: $0.label, content: $0.content) },
+            songID: original.songID,
+            mediaID: original.mediaID
         )
         service?.items.insert(copy, at: index + 1)
         selectedItemID = copy.id
+        persistAdditions([copy])
     }
 
     func canMove(_ id: ServiceItem.ID, by offset: Int) -> Bool {
@@ -533,6 +629,7 @@ final class LiveConsoleViewModel {
     func moveItem(_ id: ServiceItem.ID, by offset: Int) {
         guard canMove(id, by: offset), let index = items.firstIndex(where: { $0.id == id }) else { return }
         service?.items.swapAt(index, index + offset)
+        persistPosition(of: id, at: index + offset)
     }
 
     /// Applies a drag-to-reorder result: moves `ids` before `target` (or to the end).
@@ -543,6 +640,9 @@ final class LiveConsoleViewModel {
         let insertIndex = target.flatMap { id in list.firstIndex { $0.id == id } } ?? list.count
         list.insert(contentsOf: moving, at: insertIndex)
         service?.items = list
+        for id in ids {
+            if let index = list.firstIndex(where: { $0.id == id }) { persistPosition(of: id, at: index) }
+        }
     }
 
     func requestClearService() {
@@ -558,6 +658,32 @@ final class LiveConsoleViewModel {
         service?.items.removeAll()
         if !isShowingScripture { selectedItemID = nil }
         recentlyRemoved = nil
+
+        let repository = servicePlanRepository
+        Task { try? await repository.clear() }
+    }
+
+    /// Saves items backed by a song or media to the plan (contract §15), so any client sees them
+    /// adelantados; the Bible and the logo stay out, as before. Fire-and-forget: the item is
+    /// already on screen, and `planItemID` lands on it once the write resolves.
+    private func persistAdditions(_ items: [ServiceItem]) {
+        let repository = servicePlanRepository
+        for item in items {
+            guard let reference = item.planReference else { continue }
+            let itemID = item.id
+            Task {
+                guard let planItemID = try? await repository.add(kind: reference.kind, refID: reference.refID, label: item.title) else { return }
+                if let index = self.service?.items.firstIndex(where: { $0.id == itemID }) {
+                    self.service?.items[index].planItemID = planItemID
+                }
+            }
+        }
+    }
+
+    private func persistPosition(of id: ServiceItem.ID, at position: Int) {
+        guard let planItemID = item(id: id)?.planItemID else { return }
+        let repository = servicePlanRepository
+        Task { try? await repository.move(planItemID, to: position) }
     }
 
     // MARK: Bible

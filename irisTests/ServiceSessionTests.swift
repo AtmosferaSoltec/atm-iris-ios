@@ -15,13 +15,6 @@ struct ServiceSessionTests {
         func advance(minutes: Int, seconds: Int = 0) { now.addTimeInterval(TimeInterval(minutes * 60 + seconds)) }
     }
 
-    private struct PlanNotExpected: Error {}
-
-    /// Fails if the console asks for the sample plan.
-    private struct FailingPlanRepository: ServicePlanRepository {
-        func currentService() async throws -> ServicePlan { throw PlanNotExpected() }
-    }
-
     private let store = InMemoryChurchStore()
     private let clock = TestClock()
 
@@ -34,7 +27,7 @@ struct ServiceSessionTests {
             serviceType: serviceType,
             modules: modules,
             people: store.people,
-            servicePlanRepository: FailingPlanRepository(),
+            servicePlanRepository: EmptyServicePlanRepository(now: { clock.now }),
             projectionSettings: MockProjectionSettingsRepository(store: store, latency: .zero),
             backgroundRepository: MockBackgroundRepository(),
             bibleRepository: MockBibleRepository(),

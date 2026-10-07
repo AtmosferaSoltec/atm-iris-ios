@@ -182,11 +182,10 @@ struct AddToServiceView: View {
     private var tabContent: some View {
         switch viewModel.tab {
         case .lyrics:
-            LazyVStack(spacing: IrisSpacing.sm) {
+            LazyVStack(spacing: IrisSpacing.xxs) {
                 ForEach(viewModel.filteredLyrics) { sheet in
                     LibraryRow(
-                        icon: ServiceItem.Kind.song.systemImage,
-                        tint: ServiceItem.Kind.song.tint,
+                        leading: .icon(ServiceItem.Kind.song.systemImage, tint: ServiceItem.Kind.song.tint),
                         title: sheet.title,
                         subtitle: sheet.author,
                         trailing: nil,
@@ -199,11 +198,10 @@ struct AddToServiceView: View {
             }
 
         case .music:
-            LazyVStack(spacing: IrisSpacing.sm) {
+            LazyVStack(spacing: IrisSpacing.xxs) {
                 ForEach(viewModel.filteredMusic) { asset in
                     LibraryRow(
-                        icon: ServiceItem.Kind.music.systemImage,
-                        tint: ServiceItem.Kind.music.tint,
+                        leading: .icon(ServiceItem.Kind.music.systemImage, tint: ServiceItem.Kind.music.tint),
                         title: asset.title,
                         subtitle: asset.subtitle,
                         trailing: asset.duration,
@@ -218,10 +216,14 @@ struct AddToServiceView: View {
             }
 
         case .media:
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 200), spacing: IrisSpacing.md)], spacing: IrisSpacing.lg) {
+            LazyVStack(spacing: IrisSpacing.xxs) {
                 ForEach(viewModel.filteredMedia) { asset in
-                    LibraryMediaTile(
-                        asset: asset,
+                    LibraryRow(
+                        leading: .thumbnail(asset),
+                        title: asset.title,
+                        subtitle: asset.subtitle,
+                        trailing: asset.duration,
+                        downloadState: asset.downloadState,
                         showsSelection: viewModel.isPicker,
                         isSelected: viewModel.isSelected(.media(asset.id))
                     ) {
@@ -233,12 +235,18 @@ struct AddToServiceView: View {
     }
 }
 
-// MARK: - Rows & tiles
+// MARK: - Rows
 
-/// List row for lyrics and music.
+/// Flat list row for lyrics, music, images and videos: icon or thumbnail, title with the
+/// subtitle dimmed, duration, selection. No card fill or border — only the selected row raises,
+/// with the accent bar on the leading edge (the look of `ServiceItemRow`, carried over from Windows).
 struct LibraryRow: View {
-    let icon: String
-    let tint: Color
+    enum Leading {
+        case icon(String, tint: Color)
+        case thumbnail(MediaAsset)
+    }
+
+    let leading: Leading
     let title: String
     let subtitle: String
     let trailing: String?
@@ -255,20 +263,18 @@ struct LibraryRow: View {
 
         Button(action: action) {
             HStack(spacing: IrisSpacing.md) {
-                Image(systemName: icon)
-                    .font(.system(.body, weight: .semibold))
-                    .foregroundStyle(tint)
-                    .frame(width: 44, height: 44)
-                    .background(tint.opacity(0.14), in: RoundedRectangle(cornerRadius: IrisRadius.sm, style: .continuous))
+                leadingView
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(title)
                         .font(IrisFont.calloutEmphasized)
                         .foregroundStyle(IrisColor.textPrimary)
+                        .lineLimit(1)
                     if !subtitle.isEmpty {
                         Text(subtitle)
                             .font(IrisFont.caption)
                             .foregroundStyle(IrisColor.textTertiary)
+                            .lineLimit(1)
                     }
                 }
 
@@ -286,13 +292,18 @@ struct LibraryRow: View {
                     IrisCheckmark(isOn: isSelected)
                 }
             }
-            .padding(IrisSpacing.md - 2)
-            .background(isSelected ? IrisColor.surfaceRaised : IrisColor.surface, in: shape)
-            .overlay {
-                shape.strokeBorder(
-                    isSelected ? AnyShapeStyle(IrisGradient.accent) : AnyShapeStyle(IrisColor.stroke),
-                    lineWidth: isSelected ? 1.5 : 1
-                )
+            .padding(.horizontal, IrisSpacing.sm)
+            .padding(.vertical, IrisSpacing.sm - 2)
+            .background {
+                if isSelected {
+                    shape.fill(IrisColor.surfaceRaised)
+                        .overlay(alignment: .leading) {
+                            Capsule()
+                                .fill(IrisGradient.accent)
+                                .frame(width: 3)
+                                .padding(.vertical, IrisSpacing.xs)
+                        }
+                }
             }
             .contentShape(shape)
         }
@@ -301,12 +312,62 @@ struct LibraryRow: View {
         // Outside the row's button, so playing never selects the song. It sits where the icon is.
         .overlay(alignment: .leading) {
             if let preview {
-                PreviewPlayButton(control: preview, tint: tint)
-                    .padding(.leading, IrisSpacing.md - 2)
+                PreviewPlayButton(control: preview, tint: leadingTint)
+                    .padding(.leading, IrisSpacing.sm)
             }
         }
         .accessibilityElement(children: .contain)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    @ViewBuilder
+    private var leadingView: some View {
+        switch leading {
+        case let .icon(name, tint):
+            Image(systemName: name)
+                .font(.system(.body, weight: .semibold))
+                .foregroundStyle(tint)
+                .frame(width: 44, height: 44)
+                .background(tint.opacity(0.14), in: RoundedRectangle(cornerRadius: IrisRadius.sm, style: .continuous))
+
+        case let .thumbnail(asset):
+            LibraryThumbnail(asset: asset)
+        }
+    }
+
+    private var leadingTint: Color {
+        if case let .icon(_, tint) = leading { return tint }
+        return ServiceItem.Kind.music.tint
+    }
+}
+
+/// Small square preview for an image or video entry: the real picture, or an artwork gradient
+/// while it is still only in the cloud; a play mark for videos.
+struct LibraryThumbnail: View {
+    let asset: MediaAsset
+    var size: CGFloat = 44
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: IrisRadius.sm, style: .continuous)
+
+        ZStack {
+            LinearGradient(
+                colors: asset.artwork.map { Color(hex: $0) },
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            if let url = asset.localURL {
+                MediaThumbnail(url: url, kind: asset.kind)
+            }
+            if asset.kind == .video {
+                Image(systemName: "play.fill")
+                    .font(.system(size: size * 0.3, weight: .bold))
+                    .foregroundStyle(.white)
+            }
+        }
+        .frame(width: size, height: size)
+        .clipShape(shape)
+        .overlay { shape.strokeBorder(IrisColor.stroke) }
     }
 }
 

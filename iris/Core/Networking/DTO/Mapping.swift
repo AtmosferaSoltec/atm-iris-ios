@@ -241,3 +241,20 @@ nonisolated extension BibleBook.Testament {
         self = dto == .new ? .new : .old
     }
 }
+
+nonisolated extension PlanItemKind {
+    init?(_ dto: PlanItemKindDTO) {
+        switch dto {
+        case .song: self = .song
+        case .media: self = .media
+        case .unknown: return nil
+        }
+    }
+
+    var dto: PlanItemKindDTO {
+        switch self {
+        case .song: .song
+        case .media: .media
+        }
+    }
+}

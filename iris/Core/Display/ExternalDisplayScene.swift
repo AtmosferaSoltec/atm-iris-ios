@@ -84,10 +84,13 @@ extension EnvironmentValues {
 /// `AVPlayerLayer` in SwiftUI, without controls.
 struct PlayerLayerView: UIViewRepresentable {
     let player: AVPlayer
+    /// `.resizeAspect` for a slide's own video (never cropped); `.resizeAspectFill` for a
+    /// background video (fills the 16:9 canvas edge to edge, like a background image).
+    var gravity: AVLayerVideoGravity = .resizeAspect
 
     func makeUIView(context: Context) -> PlayerUIView {
         let view = PlayerUIView()
-        view.playerLayer.videoGravity = .resizeAspect
+        view.playerLayer.videoGravity = gravity
         view.playerLayer.player = player
         view.backgroundColor = .black
         return view

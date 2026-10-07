@@ -25,17 +25,85 @@ nonisolated struct ServiceItem: Identifiable, Equatable, Sendable {
     /// Author, reference or short description.
     var subtitle: String
     var slides: [Slide]
+    /// The song behind a `.song` item, so it can be adelantado and found again in the plan
+    /// (contract §15). `nil` for text typed by hand and sample data.
+    var songID: UUID?
     /// The library file behind music, image and video items, so the console can follow its
     /// download and pick up the file once it is on this iPad. `nil` for text and sample data.
     var mediaID: String?
+    /// The row in the service plan this item came from (or was saved to), so moving or removing
+    /// it here also updates it there. `nil` for items never adelantados: the Bible and the logo,
+    /// which stay only for the length of this service.
+    var planItemID: UUID?
 
-    init(id: UUID = UUID(), kind: Kind, title: String, subtitle: String, slides: [Slide], mediaID: String? = nil) {
+    init(
+        id: UUID = UUID(),
+        kind: Kind,
+        title: String,
+        subtitle: String,
+        slides: [Slide],
+        songID: UUID? = nil,
+        mediaID: String? = nil,
+        planItemID: UUID? = nil
+    ) {
         self.id = id
         self.kind = kind
         self.title = title
         self.subtitle = subtitle
         self.slides = slides
+        self.songID = songID
         self.mediaID = mediaID
+        self.planItemID = planItemID
+    }
+}
+
+/// Which library item a plan row points at (contract §15).
+nonisolated enum PlanItemKind: Sendable {
+    case song, media
+}
+
+nonisolated extension ServiceItem {
+    /// Builds a song item from the library, with a stable reference back to it.
+    init(lyric: LyricSheet) {
+        self.init(kind: .song, title: lyric.title, subtitle: lyric.author, slides: lyric.sections, songID: lyric.id)
+    }
+
+    /// Builds a music, image or video item from the library, with a stable reference back to it.
+    init(asset: MediaAsset) {
+        switch asset.kind {
+        case .music:
+            self.init(
+                kind: .music,
+                title: asset.title,
+                subtitle: "\(asset.subtitle) · \(asset.duration ?? "")",
+                slides: [Slide(content: .audio(title: asset.title, duration: asset.duration ?? "", url: asset.localURL))],
+                mediaID: asset.id
+            )
+        case .image:
+            self.init(
+                kind: .image,
+                title: asset.title,
+                subtitle: asset.subtitle,
+                slides: [Slide(content: .image(title: asset.title, artwork: asset.artwork, url: asset.localURL))],
+                mediaID: asset.id
+            )
+        case .video:
+            self.init(
+                kind: .video,
+                title: asset.title,
+                subtitle: String(localized: "Video · \(asset.duration ?? "")"),
+                slides: [Slide(content: .video(title: asset.title, duration: asset.duration ?? "", url: asset.localURL))],
+                mediaID: asset.id
+            )
+        }
+    }
+
+    /// `(kind, refID)` for the service plan (contract §15); `nil` for an item never adelantado
+    /// (the Bible, the logo) that only lasts for this service.
+    var planReference: (kind: PlanItemKind, refID: String)? {
+        if let songID { return (.song, songID.apiString) }
+        if let mediaID { return (.media, mediaID) }
+        return nil
     }
 }
 

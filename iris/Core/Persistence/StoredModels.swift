@@ -10,7 +10,7 @@ import SwiftData
 
 /// Kinds of synchronized content.
 nonisolated enum EntityKind: String, Codable, CaseIterable, Sendable {
-    case church, people, serviceTypes, songs, media, serviceRecords
+    case church, people, serviceTypes, songs, media, serviceRecords, servicePlan
 }
 
 /// One synchronized row: the contract's JSON of the entity, as last seen or written locally.

@@ -122,7 +122,7 @@ struct AppDependencies {
         return AppDependencies(
             authService: authService,
             showcaseProvider: StaticShowcaseContentProvider(),
-            servicePlanRepository: EmptyServicePlanRepository(),
+            servicePlanRepository: LiveServicePlanRepository(data: data, library: library),
             backgroundRepository: LiveBackgroundRepository(library: library),
             bibleRepository: LiveBibleRepository(store: bibleStore),
             libraryRepository: library,

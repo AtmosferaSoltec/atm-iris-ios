@@ -253,6 +253,9 @@ final class SyncEngine: SyncService {
                     page += 1
                 }
                 try await store.replaceAll(.serviceRecords, with: records.map { ($0.id, LocalStore.newestFirst($0.date), $0) })
+            case .servicePlan:
+                let items = try await client.send(APIRequest(.get, "/service-plan"), as: [ServicePlanItemDTO].self)
+                try await store.replaceAll(.servicePlan, with: items.map { ($0.id, LocalStore.position($0.position), $0) })
             case .songs, .media:
                 return
             }

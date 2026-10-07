@@ -126,6 +126,17 @@ struct SlideWorkspaceView: View {
                 .accessibilityLabel(Text("Biblia"))
             }
 
+            Button {
+                viewModel.presentCountdownPicker()
+            } label: {
+                Label(viewModel.countdownButtonText, systemImage: "timer")
+            }
+            .buttonStyle(.irisPill)
+            .accessibilityLabel(Text("Temporizador"))
+            .popover(isPresented: $viewModel.isPickingCountdown) {
+                CountdownPickerView(viewModel: viewModel)
+            }
+
             if !viewModel.isShowingScripture {
                 Button {} label: {
                     Label("Editar", systemImage: "pencil")

@@ -6,12 +6,35 @@
 import AVFoundation
 import Foundation
 
-/// Source of service plans (local in V1, API later).
+/// What any client (web, iPad, Windows) adelantó for the next service: songs and media, in order,
+/// with no history by service (contract §15). A console that opens with nothing adelantado just
+/// gets an empty list — the product rule that a service always starts blank still holds; this is
+/// what the web (or another console) chose to have ready, not a saved history.
 protocol ServicePlanRepository {
+    /// Yields when the local copy of this data changes (a sync, another screen).
+    func changes() -> AsyncStream<Void>
     func currentService() async throws -> ServicePlan
+    /// Adds a song or media item and returns the id of its new row, to attach to the resulting
+    /// `ServiceItem` (`planItemID`) so it can be moved or removed later.
+    @discardableResult
+    func add(kind: PlanItemKind, refID: String, label: String) async throws -> UUID
+    /// Reorders; the rest shift to make room.
+    func move(_ planItemID: UUID, to position: Int) async throws
+    func remove(_ planItemID: UUID, label: String) async throws
+    func clear() async throws
 }
 
-/// A service started from Home always begins with an empty list (product rule): nothing is planned ahead in V1.
+extension ServicePlanRepository {
+    func changes() -> AsyncStream<Void> { .finished }
+    @discardableResult
+    func add(kind: PlanItemKind, refID: String, label: String) async throws -> UUID { UUID() }
+    func move(_ planItemID: UUID, to position: Int) async throws {}
+    func remove(_ planItemID: UUID, label: String) async throws {}
+    func clear() async throws {}
+}
+
+/// A service started from Home always begins with an empty list (product rule): nothing is
+/// adelantado until the web (or another console) puts something there.
 struct EmptyServicePlanRepository: ServicePlanRepository {
     var now: () -> Date = { .now }
 

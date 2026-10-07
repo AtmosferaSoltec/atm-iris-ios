@@ -14,13 +14,16 @@ nonisolated struct ProjectionBackground: Identifiable, Hashable, Sendable {
     var isAnimated: Bool
     /// A church image marked as background, drawn to fill the screen.
     var imageURL: URL?
+    /// A church video marked as background: muted, looping, drawn to fill the screen (contract §11).
+    var videoURL: URL?
 
-    init(id: String, name: String, colors: [UInt32], isAnimated: Bool, imageURL: URL? = nil) {
+    init(id: String, name: String, colors: [UInt32], isAnimated: Bool, imageURL: URL? = nil, videoURL: URL? = nil) {
         self.id = id
         self.name = name
         self.colors = colors
         self.isAnimated = isAnimated
         self.imageURL = imageURL
+        self.videoURL = videoURL
     }
 }
 
@@ -35,6 +38,8 @@ nonisolated struct ProjectionFrame: Equatable, Sendable {
         case video(title: String, duration: String, url: URL? = nil)
         case audio(title: String, duration: String, url: URL? = nil)
         case logo(String)
+        /// The countdown: big digits over the background. `isFinished` turns them red.
+        case timer(text: String, isFinished: Bool)
     }
 
     /// `nil` renders pure black.

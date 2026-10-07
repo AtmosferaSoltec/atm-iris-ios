@@ -168,8 +168,8 @@ nonisolated enum ContractSamples {
     static func syncPage(church: String? = nil, people: [String] = [], serviceTypes: [String] = [], deletedPeople: [String] = [], cursor: String, hasMore: Bool) -> String {
         """
         {"church":\(church ?? "null"),
-        "changes":{"people":[\(people.joined(separator: ","))],"serviceTypes":[\(serviceTypes.joined(separator: ","))],"songs":[],"media":[],"serviceRecords":[]},
-        "deleted":{"people":[\(deletedPeople.map { "\"\($0)\"" }.joined(separator: ","))],"serviceTypes":[],"songs":[],"media":[],"serviceRecords":[]},
+        "changes":{"people":[\(people.joined(separator: ","))],"serviceTypes":[\(serviceTypes.joined(separator: ","))],"songs":[],"media":[],"serviceRecords":[],"servicePlan":[]},
+        "deleted":{"people":[\(deletedPeople.map { "\"\($0)\"" }.joined(separator: ","))],"serviceTypes":[],"songs":[],"media":[],"serviceRecords":[],"servicePlan":[]},
         "cursor":"\(cursor)","hasMore":\(hasMore)}
         """
     }

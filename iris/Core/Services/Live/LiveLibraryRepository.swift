@@ -40,7 +40,11 @@ struct LiveBackgroundRepository: BackgroundRepository {
         let images = ((try? await library.media(of: .image)) ?? [])
             .filter { $0.isBackground && $0.localURL != nil }
             .map { ProjectionBackground(id: "media-\($0.id)", name: $0.title, colors: $0.artwork, isAnimated: false, imageURL: $0.localURL) }
-        return ProjectionBackground.gradients + images
+        // A video background loops muted behind the lyrics (contract §11); same eligibility as images.
+        let videos = ((try? await library.media(of: .video)) ?? [])
+            .filter { $0.isBackground && $0.localURL != nil }
+            .map { ProjectionBackground(id: "media-\($0.id)", name: $0.title, colors: $0.artwork, isAnimated: true, videoURL: $0.localURL) }
+        return ProjectionBackground.gradients + images + videos
     }
 }
 

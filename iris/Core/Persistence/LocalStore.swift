@@ -143,10 +143,12 @@ actor LocalStore {
         for song in page.changes.songs { try put(.songs, song.id, song.title.nameKey, song) }
         for asset in page.changes.media { try put(.media, asset.id, Self.newestFirst(asset.createdAt), asset) }
         for record in page.changes.serviceRecords { try put(.serviceRecords, record.id, Self.newestFirst(record.date), record) }
+        for entry in page.changes.servicePlan { try put(.servicePlan, entry.id, Self.position(entry.position), entry) }
 
         let deletions: [(EntityKind, [String])] = [
             (.people, page.deleted.people), (.serviceTypes, page.deleted.serviceTypes), (.songs, page.deleted.songs),
-            (.media, page.deleted.media), (.serviceRecords, page.deleted.serviceRecords)
+            (.media, page.deleted.media), (.serviceRecords, page.deleted.serviceRecords),
+            (.servicePlan, page.deleted.servicePlan)
         ]
         for (kind, ids) in deletions {
             for id in ids {
@@ -248,5 +250,10 @@ actor LocalStore {
     /// Sort key that orders dates newest first.
     static func newestFirst(_ date: Date) -> String {
         String(format: "%015.0f", 9_999_999_999_999 - date.timeIntervalSince1970 * 1000)
+    }
+
+    /// Sort key that orders a service plan's items by `position`.
+    static func position(_ position: Int) -> String {
+        String(format: "%05d", position)
     }
 }

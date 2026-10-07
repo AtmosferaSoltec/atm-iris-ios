@@ -131,6 +131,12 @@ struct ProjectionCanvas: View {
                     .font(.system(size: width * 0.04, weight: .medium, design: .serif))
                     .foregroundStyle(.white)
             }
+
+        case let .timer(text, isFinished):
+            Text(text)
+                .font(.system(size: width * (text.count > 5 ? 0.18 : 0.26), weight: .semibold, design: .serif))
+                .monospacedDigit()
+                .foregroundStyle(isFinished ? IrisColor.danger : .white)
         }
     }
 }
@@ -150,7 +156,11 @@ struct ProjectionBackgroundView: View {
         GeometryReader { proxy in
             ZStack {
                 gradient
-                if let url = background.imageURL {
+                if let url = background.videoURL {
+                    LoopingBackgroundVideo(url: url)
+                        .frame(width: proxy.size.width, height: proxy.size.height)
+                        .clipped()
+                } else if let url = background.imageURL {
                     LocalImage(url: url, maxPixelSize: ProjectionCanvas.imagePixelSize(proxy.size.width), contentMode: .fill)
                         .frame(width: proxy.size.width, height: proxy.size.height)
                         .clipped()
@@ -174,6 +184,36 @@ struct ProjectionBackgroundView: View {
                 startRadius: 0,
                 endRadius: 600
             )
+        }
+    }
+}
+
+/// A background video: muted and looping forever, independent of whatever else is playing
+/// (a background never has its own sound; the room's music comes from somewhere else).
+private struct LoopingBackgroundVideo: View {
+    let url: URL
+
+    @State private var player: AVPlayer?
+    @State private var looper: AVPlayerLooper?
+
+    var body: some View {
+        ZStack {
+            if let player {
+                PlayerLayerView(player: player, gravity: .resizeAspectFill)
+            }
+        }
+        .onAppear {
+            guard player == nil else { return }
+            let queue = AVQueuePlayer()
+            queue.isMuted = true
+            looper = AVPlayerLooper(player: queue, templateItem: AVPlayerItem(url: url))
+            queue.play()
+            player = queue
+        }
+        .onDisappear {
+            player?.pause()
+            player = nil
+            looper = nil
         }
     }
 }

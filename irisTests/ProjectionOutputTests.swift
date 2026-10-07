@@ -52,7 +52,7 @@ struct ProjectionOutputTests {
             serviceType: store.serviceTypes[0],
             modules: modules,
             people: store.people,
-            servicePlanRepository: MockServicePlanRepository(),
+            servicePlanRepository: EmptyServicePlanRepository(),
             projectionSettings: MockProjectionSettingsRepository(store: store, latency: .zero),
             backgroundRepository: MockBackgroundRepository(),
             bibleRepository: MockBibleRepository(),

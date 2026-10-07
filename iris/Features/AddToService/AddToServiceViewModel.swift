@@ -186,36 +186,11 @@ final class AddToServiceViewModel: Identifiable {
         switch selection {
         case let .lyric(id):
             guard let sheet = lyrics.first(where: { $0.id == id }) else { return nil }
-            return ServiceItem(kind: .song, title: sheet.title, subtitle: sheet.author, slides: sheet.sections)
+            return ServiceItem(lyric: sheet)
 
         case let .media(id):
             guard let asset = (music + media).first(where: { $0.id == id }) else { return nil }
-            switch asset.kind {
-            case .music:
-                return ServiceItem(
-                    kind: .music,
-                    title: asset.title,
-                    subtitle: "\(asset.subtitle) · \(asset.duration ?? "")",
-                    slides: [Slide(content: .audio(title: asset.title, duration: asset.duration ?? "", url: asset.localURL))],
-                    mediaID: asset.id
-                )
-            case .image:
-                return ServiceItem(
-                    kind: .image,
-                    title: asset.title,
-                    subtitle: asset.subtitle,
-                    slides: [Slide(content: .image(title: asset.title, artwork: asset.artwork, url: asset.localURL))],
-                    mediaID: asset.id
-                )
-            case .video:
-                return ServiceItem(
-                    kind: .video,
-                    title: asset.title,
-                    subtitle: String(localized: "Video · \(asset.duration ?? "")"),
-                    slides: [Slide(content: .video(title: asset.title, duration: asset.duration ?? "", url: asset.localURL))],
-                    mediaID: asset.id
-                )
-            }
+            return ServiceItem(asset: asset)
         }
     }
 }

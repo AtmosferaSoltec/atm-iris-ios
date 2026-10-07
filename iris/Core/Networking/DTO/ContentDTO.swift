@@ -58,6 +58,32 @@ nonisolated struct DownloadURLDTO: Codable, Hashable, Sendable {
     let expiresAt: Date
 }
 
+nonisolated enum PlanItemKindDTO: String, TolerantStringEnum {
+    case song, media, unknown
+}
+
+/// Contract §15: what any client adelantó for the next service.
+nonisolated struct ServicePlanItemDTO: Codable, Hashable, Sendable {
+    let id: String
+    let kind: PlanItemKindDTO
+    let refId: String
+    let position: Int
+    let createdAt: Date
+    let updatedAt: Date
+}
+
+/// Body of `POST /service-plan`.
+nonisolated struct ServicePlanItemCreateBody: Encodable, Sendable {
+    let id: String
+    let kind: PlanItemKindDTO
+    let refId: String
+}
+
+/// Body of `PUT /service-plan/:id/position`.
+nonisolated struct ServicePlanItemMoveBody: Encodable, Sendable {
+    let position: Int
+}
+
 nonisolated enum TestamentDTO: String, TolerantStringEnum {
     case old, new, unknown
 }

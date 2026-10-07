@@ -135,6 +135,95 @@ struct LivePeopleRepository: PeopleRepository {
     }
 }
 
+/// What the web (or another console) adelantó for the next service (contract §15): songs and
+/// media, resolved against the library like `AddToServiceViewModel` resolves a pick.
+struct LiveServicePlanRepository: ServicePlanRepository {
+    let data: LiveChurchData
+    let library: any LibraryRepository
+
+    func changes() -> AsyncStream<Void> { data.changes(of: [.servicePlan]) }
+
+    func currentService() async throws -> ServicePlan {
+        let entries = await data.store.all(.servicePlan, as: ServicePlanItemDTO.self)
+        var items: [ServiceItem] = []
+        if !entries.isEmpty {
+            let lyrics = (try? await library.lyrics()) ?? []
+            let media = await library.music() + (await library.uploadedMedia())
+            items = entries.compactMap { Self.resolve($0, lyrics: lyrics, media: media) }
+        }
+        return ServicePlan(id: UUID(), title: String(localized: "Servicio"), date: data.now(), items: items)
+    }
+
+    @discardableResult
+    func add(kind: PlanItemKind, refID: String, label: String) async throws -> UUID {
+        let id = UUID()
+        let position = await data.store.count(.servicePlan)
+        let now = data.now()
+        let dto = ServicePlanItemDTO(id: id.apiString, kind: kind.dto, refId: refID, position: position, createdAt: now, updatedAt: now)
+        try await data.store.upsert(.servicePlan, [(dto.id, LocalStore.position(position), dto)])
+        try await data.write(
+            APIRequest(.post, "/service-plan", body: ServicePlanItemCreateBody(id: dto.id, kind: dto.kind, refId: refID)),
+            kind: .servicePlan, label: label, touching: [.servicePlan]
+        )
+        return id
+    }
+
+    func move(_ planItemID: UUID, to position: Int) async throws {
+        let id = planItemID.apiString
+        var entries = await data.store.all(.servicePlan, as: ServicePlanItemDTO.self)
+        guard let from = entries.firstIndex(where: { $0.id == id }) else { return }
+        let moved = entries.remove(at: from)
+        let to = min(max(position, 0), entries.count)
+        entries.insert(moved, at: to)
+
+        let now = data.now()
+        let reindexed = entries.enumerated().map { index, entry in
+            ServicePlanItemDTO(
+                id: entry.id, kind: entry.kind, refId: entry.refId, position: index,
+                createdAt: entry.createdAt, updatedAt: entry.id == id ? now : entry.updatedAt
+            )
+        }
+        try await data.store.upsert(.servicePlan, reindexed.map { ($0.id, LocalStore.position($0.position), $0) })
+        try await data.write(
+            APIRequest(.put, "/service-plan/\(id)/position", body: ServicePlanItemMoveBody(position: to)),
+            kind: .servicePlan, label: "", touching: [.servicePlan]
+        )
+    }
+
+    func remove(_ planItemID: UUID, label: String) async throws {
+        let id = planItemID.apiString
+        try await data.store.delete(.servicePlan, ids: [id])
+        try await data.write(
+            APIRequest(.delete, "/service-plan/\(id)"),
+            kind: .servicePlan, label: label, touching: [.servicePlan]
+        )
+    }
+
+    func clear() async throws {
+        let ids = await data.store.all(.servicePlan, as: ServicePlanItemDTO.self).map(\.id)
+        guard !ids.isEmpty else { return }
+        try await data.store.delete(.servicePlan, ids: ids)
+        try await data.write(
+            APIRequest(.delete, "/service-plan"),
+            kind: .servicePlan, label: "", touching: [.servicePlan]
+        )
+    }
+
+    private static func resolve(_ entry: ServicePlanItemDTO, lyrics: [LyricSheet], media: [MediaAsset]) -> ServiceItem? {
+        var item: ServiceItem?
+        switch PlanItemKind(entry.kind) {
+        case .song:
+            item = lyrics.first { $0.id.apiString == entry.refId }.map(ServiceItem.init(lyric:))
+        case .media:
+            item = media.first { $0.id == entry.refId }.map(ServiceItem.init(asset:))
+        case nil:
+            item = nil
+        }
+        item?.planItemID = UUID(uuidString: entry.id)
+        return item
+    }
+}
+
 struct LiveServiceTypeRepository: ServiceTypeRepository {
     let data: LiveChurchData
 
