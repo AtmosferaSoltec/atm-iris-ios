@@ -5,11 +5,12 @@
 
 import SwiftUI
 
-/// Sign in / sign up entry point: brand hero on the left, form panel on the right.
+/// Sign-in entry point (accounts are created on the web): brand hero on the left, form panel on the right.
 struct AuthView: View {
     @Bindable var viewModel: AuthViewModel
 
     @FocusState private var focus: AuthViewModel.Field?
+    @Environment(\.openURL) private var openURL
 
     var body: some View {
         GeometryReader { proxy in
@@ -53,30 +54,21 @@ struct AuthView: View {
             VStack(alignment: .leading, spacing: IrisSpacing.lg) {
                 panelHeader
 
-                IrisSegmentedControl(
-                    options: AuthViewModel.Mode.allCases,
-                    selection: $viewModel.mode,
-                    title: \.title
-                )
-
                 if let message = viewModel.bannerMessage {
                     IrisBanner(style: viewModel.bannerStyle, message: message)
                         .transition(.opacity.combined(with: .move(edge: .top)))
                 }
 
-                activeForm
+                SignInFormView(viewModel: viewModel, focus: $focus, onSubmit: { submit() })
 
                 Button { submit() } label: {
                     Text(viewModel.submitTitle)
                 }
                 .buttonStyle(.irisPrimary(isLoading: viewModel.isSubmitting))
 
-                if viewModel.mode == .signUp {
-                    legalNotice
-                }
+                createAccountOnWeb
             }
         }
-        .animation(IrisMotion.smooth, value: viewModel.mode)
         .animation(IrisMotion.snappy, value: viewModel.bannerMessage)
     }
 
@@ -90,30 +82,20 @@ struct AuthView: View {
                 .foregroundStyle(IrisColor.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .id(viewModel.mode)
-        .transition(.blurReplace)
     }
 
-    @ViewBuilder
-    private var activeForm: some View {
-        switch viewModel.mode {
-        case .signIn:
-            SignInFormView(viewModel: viewModel, focus: $focus, onSubmit: { submit() })
-                .transition(.blurReplace)
-        case .signUp:
-            SignUpFormView(viewModel: viewModel, focus: $focus, onSubmit: { submit() })
-                .transition(.blurReplace)
+    /// Accounts are created on the web only.
+    private var createAccountOnWeb: some View {
+        VStack(spacing: IrisSpacing.xs) {
+            Text("¿Tu iglesia aún no tiene cuenta?")
+                .font(IrisFont.callout)
+                .foregroundStyle(IrisColor.textSecondary)
+            Button { openURL(WebLinks.app) } label: {
+                Text("Crea tu cuenta en la web")
+            }
+            .buttonStyle(.irisLink)
         }
-    }
-
-    private var legalNotice: some View {
-        Text("Al crear tu cuenta aceptas los [Términos](https://iris.app/terminos) y la [Política de privacidad](https://iris.app/privacidad).")
-            .font(IrisFont.caption)
-            .foregroundStyle(IrisColor.textTertiary)
-            .tint(IrisColor.textSecondary)
-            .multilineTextAlignment(.center)
-            .frame(maxWidth: .infinity)
-            .transition(.opacity)
+        .frame(maxWidth: .infinity)
     }
 
     private func submit() {
@@ -131,15 +113,4 @@ struct AuthView: View {
         )
     )
     .preferredColorScheme(.dark)
-}
-
-#Preview("Sign up", traits: .landscapeLeft) {
-    let viewModel = AuthViewModel(
-        authService: MockAuthService(),
-        showcaseProvider: StaticShowcaseContentProvider(),
-        onAuthenticated: { _ in }
-    )
-    viewModel.mode = .signUp
-    return AuthView(viewModel: viewModel)
-        .preferredColorScheme(.dark)
 }

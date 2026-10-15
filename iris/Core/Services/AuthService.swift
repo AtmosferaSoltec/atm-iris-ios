@@ -16,7 +16,6 @@ protocol AuthService {
     func sessionEvents() -> AsyncStream<SessionEvent>
 
     func signIn(_ credentials: SignInCredentials) async throws -> UserSession
-    func signUp(_ request: SignUpRequest) async throws -> UserSession
     /// Signs out on the API when possible; always forgets the session locally.
     func signOut() async
     /// Closes every session of the account (web, iPad, Windows), this one included.

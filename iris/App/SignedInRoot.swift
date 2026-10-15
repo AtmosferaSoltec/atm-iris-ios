@@ -40,21 +40,26 @@ final class SignedInNavigator {
 struct SignedInRoot: View {
     private let session: UserSession
     private let dependencies: AppDependencies
+    private let updateGate: AppUpdateGate
 
     @State private var context: SessionContext
     @State private var navigator: SignedInNavigator
     @State private var homeViewModel: HomeViewModel
     @State private var account: AccountViewModel
+    @State private var showsWelcome: Bool
 
     init(
         session: UserSession,
         dependencies: AppDependencies,
+        updateGate: AppUpdateGate,
         onSignedOut: @escaping () -> Void,
         onSwitched: @escaping (UserSession) -> Void
     ) {
         self.session = session
         self.dependencies = dependencies
+        self.updateGate = updateGate
 
+        _showsWelcome = State(initialValue: !Self.welcomeSeen(by: session.userID))
         let context = SessionContext(session)
         _context = State(initialValue: context)
         let navigator = SignedInNavigator(sync: dependencies.sync)
@@ -154,10 +159,32 @@ struct SignedInRoot: View {
                     .transition(.opacity)
             }
         }
+        .overlay {
+            if showsWelcome {
+                WelcomeView {
+                    UserDefaults.standard.set(true, forKey: Self.welcomeKey(for: session.userID))
+                    showsWelcome = false
+                }
+                .transition(.opacity)
+            }
+        }
+        .animation(IrisMotion.smooth, value: showsWelcome)
         .animation(IrisMotion.smooth, value: navigator.route)
+        .onChange(of: navigator.route, initial: true) { _, route in
+            if case .console = route { updateGate.isServiceLive = true } else { updateGate.isServiceLive = false }
+        }
         .task { await dependencies.sync.start(session: session) }
         // Role and permission changes reach every open screen without rebuilding them.
         .onChange(of: session) { _, session in context.session = session }
+    }
+
+    /// The welcome screen is shown once per person on this iPad.
+    private static func welcomeKey(for userID: UUID) -> String {
+        "welcomeSeen.\(userID.uuidString)"
+    }
+
+    private static func welcomeSeen(by userID: UUID) -> Bool {
+        UserDefaults.standard.bool(forKey: welcomeKey(for: userID))
     }
 
     /// Top bar with "‹ Inicio" and the screen title, over the ambient background.

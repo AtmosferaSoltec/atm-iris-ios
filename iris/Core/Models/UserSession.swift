@@ -96,13 +96,6 @@ nonisolated struct SignInCredentials: Equatable, Sendable {
     let password: String
 }
 
-nonisolated struct SignUpRequest: Equatable, Sendable {
-    let churchName: String
-    let fullName: String
-    let email: String
-    let password: String
-}
-
 nonisolated extension Calendar {
     /// Gregorian calendar in the church's time zone, with Spanish conventions.
     static func church(timeZone: TimeZone) -> Calendar {

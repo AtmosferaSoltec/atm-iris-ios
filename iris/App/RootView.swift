@@ -11,6 +11,8 @@ struct RootView: View {
 
     @State private var sessionStore: SessionStore
     @State private var authViewModel: AuthViewModel
+    @State private var updateGate: AppUpdateGate
+    @Environment(\.scenePhase) private var scenePhase
 
     init(dependencies: AppDependencies) {
         self.dependencies = dependencies
@@ -25,6 +27,7 @@ struct RootView: View {
         onSignedOut = { authViewModel.presentSignOut(reason: $0) }
         _sessionStore = State(initialValue: sessionStore)
         _authViewModel = State(initialValue: authViewModel)
+        _updateGate = State(initialValue: AppUpdateGate(service: dependencies.appVersions))
     }
 
     var body: some View {
@@ -33,6 +36,7 @@ struct RootView: View {
                 SignedInRoot(
                     session: session,
                     dependencies: dependencies,
+                    updateGate: updateGate,
                     onSignedOut: { sessionStore.end(reason: .requested) },
                     onSwitched: { sessionStore.begin($0) }
                 )
@@ -43,9 +47,23 @@ struct RootView: View {
                 AuthView(viewModel: authViewModel)
                     .transition(.opacity)
             }
+
+            // Blocks everything until the new version is installed (never while a service is running).
+            if let notice = updateGate.visibleNotice {
+                UpdateRequiredView(notice: notice)
+                    .transition(.opacity)
+            }
         }
         .animation(IrisMotion.smooth, value: sessionStore.session)
+        .animation(IrisMotion.smooth, value: updateGate.visibleNotice)
+        .onChange(of: sessionStore.session) { _, session in
+            // Signing out from the console must not leave the notice hidden on the sign-in screen.
+            if session == nil { updateGate.isServiceLive = false }
+        }
         .task { await sessionStore.run() }
+        .task(id: scenePhase) {
+            if scenePhase == .active { await updateGate.refresh() }
+        }
         .preferredColorScheme(.dark)
         // V1 is Spanish-only; keep dates and times formatted accordingly.
         .environment(\.locale, Locale(identifier: "es"))

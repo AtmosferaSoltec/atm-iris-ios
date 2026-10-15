@@ -34,20 +34,6 @@ struct MockAuthService: AuthService {
         return session
     }
 
-    func signUp(_ request: SignUpRequest) async throws -> UserSession {
-        try await Task.sleep(for: latency)
-        if request.email.lowercased().hasPrefix("existe@") {
-            let message = String(localized: "Ya existe una cuenta con ese correo.")
-            throw AuthError.api(code: "EMAIL_TAKEN", message: message, fieldErrors: ["email": message])
-        }
-        var session = UserSession.preview
-        session.church.name = request.churchName
-        session.churches = [UserSession.ChurchSummary(id: session.church.id, name: request.churchName, role: .owner)]
-        session.fullName = request.fullName
-        session.email = request.email
-        return session
-    }
-
     func signOut() async {}
 
     func signOutAll() async throws {

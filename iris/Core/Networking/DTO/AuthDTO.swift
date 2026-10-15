@@ -99,14 +99,6 @@ nonisolated struct SignInBody: Encodable, Sendable {
     let client: ClientInfoDTO
 }
 
-nonisolated struct SignUpBody: Encodable, Sendable {
-    let churchName: String
-    let fullName: String
-    let email: String
-    let password: String
-    let client: ClientInfoDTO
-}
-
 nonisolated struct RefreshBody: Encodable, Sendable {
     let refreshToken: String
 }

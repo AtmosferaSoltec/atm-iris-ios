@@ -22,6 +22,7 @@ struct AppDependencies {
     let people: any PeopleRepository
     let timeRecords: any TimeRecordRepository
     let sync: any SyncService
+    let appVersions: any AppVersionService
 
     /// The container for this launch.
     static func make(_ config: AppConfig) -> AppDependencies {
@@ -48,7 +49,8 @@ struct AppDependencies {
             serviceTypes: MockServiceTypeRepository(store: churchStore),
             people: MockPeopleRepository(store: churchStore),
             timeRecords: MockTimeRecordRepository(store: churchStore),
-            sync: MockSyncService()
+            sync: MockSyncService(),
+            appVersions: MockAppVersionService()
         )
     }()
 
@@ -133,7 +135,11 @@ struct AppDependencies {
             serviceTypes: LiveServiceTypeRepository(data: data),
             people: LivePeopleRepository(data: data),
             timeRecords: LiveTimeRecordRepository(data: data),
-            sync: sync
+            sync: sync,
+            appVersions: LiveAppVersionService(
+                client: publicClient,
+                currentVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.0"
+            )
         )
     }
 

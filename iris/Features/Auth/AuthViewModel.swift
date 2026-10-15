@@ -8,41 +8,14 @@ import Observation
 
 @Observable
 final class AuthViewModel {
-    enum Mode: Hashable, Identifiable, CaseIterable {
-        case signIn, signUp
-
-        var id: Self { self }
-
-        var title: LocalizedStringResource {
-            switch self {
-            case .signIn: "Iniciar sesión"
-            case .signUp: "Crear cuenta"
-            }
-        }
-    }
-
     enum Field: Hashable {
         case signInEmail, signInPassword
-        case churchName, leaderName, signUpEmail, signUpPassword
     }
 
     // MARK: State
 
-    var mode: Mode = .signIn {
-        didSet {
-            guard oldValue != mode else { return }
-            fieldErrors = [:]
-            bannerMessage = nil
-        }
-    }
-
     var signInEmail = "" { didSet { clearFeedback(for: .signInEmail) } }
     var signInPassword = "" { didSet { clearFeedback(for: .signInPassword) } }
-
-    var churchName = "" { didSet { clearFeedback(for: .churchName) } }
-    var leaderName = "" { didSet { clearFeedback(for: .leaderName) } }
-    var signUpEmail = "" { didSet { clearFeedback(for: .signUpEmail) } }
-    var signUpPassword = "" { didSet { clearFeedback(for: .signUpPassword) } }
 
     private(set) var fieldErrors: [Field: String] = [:]
     private(set) var bannerMessage: String?
@@ -75,26 +48,11 @@ final class AuthViewModel {
 
     // MARK: Presentation
 
-    var headline: LocalizedStringResource {
-        switch mode {
-        case .signIn: "Te damos la bienvenida"
-        case .signUp: "Crea el espacio de tu iglesia"
-        }
-    }
+    var headline: LocalizedStringResource { "Te damos la bienvenida" }
 
-    var subtitle: LocalizedStringResource {
-        switch mode {
-        case .signIn: "Ingresa con el correo de tu iglesia para preparar el servicio."
-        case .signUp: "Configúralo en menos de un minuto y empieza a proyectar."
-        }
-    }
+    var subtitle: LocalizedStringResource { "Ingresa con el correo de tu iglesia para preparar el servicio." }
 
-    var submitTitle: LocalizedStringResource {
-        switch mode {
-        case .signIn: "Entrar"
-        case .signUp: "Crear cuenta"
-        }
-    }
+    var submitTitle: LocalizedStringResource { "Entrar" }
 
     var currentShowcaseItem: ShowcaseItem? {
         showcaseItems.indices.contains(showcaseIndex) ? showcaseItems[showcaseIndex] : nil
@@ -115,24 +73,10 @@ final class AuthViewModel {
         defer { isSubmitting = false }
 
         do {
-            let session: UserSession
-            switch mode {
-            case .signIn:
-                session = try await authService.signIn(
-                    SignInCredentials(email: trimmed(signInEmail), password: signInPassword)
-                )
-            case .signUp:
-                session = try await authService.signUp(
-                    SignUpRequest(
-                        churchName: trimmed(churchName),
-                        fullName: trimmed(leaderName),
-                        email: trimmed(signUpEmail),
-                        password: signUpPassword
-                    )
-                )
-            }
+            let session = try await authService.signIn(
+                SignInCredentials(email: trimmed(signInEmail), password: signInPassword)
+            )
             signInPassword = ""
-            signUpPassword = ""
             onAuthenticated(session)
         } catch {
             show(AuthError(error))
@@ -148,7 +92,6 @@ final class AuthViewModel {
     /// Explains why the app came back to the sign-in screen.
     func presentSignOut(reason: SignOutReason) {
         guard reason == .expired else { return }
-        mode = .signIn
         showNotice(String(localized: "Tu sesión expiró. Vuelve a iniciar sesión."), style: .error)
     }
 
@@ -170,33 +113,15 @@ final class AuthViewModel {
 
     private func validate() -> Bool {
         var errors: [Field: String] = [:]
-
-        switch mode {
-        case .signIn:
-            errors[.signInEmail] = validator.emailError(for: signInEmail)
-            errors[.signInPassword] = validator.passwordError(for: signInPassword, requiresStrength: false)
-        case .signUp:
-            errors[.churchName] = validator.requiredError(
-                for: churchName, message: String(localized: "Escribe el nombre de tu iglesia.")
-            )
-            errors[.leaderName] = validator.requiredError(
-                for: leaderName, message: String(localized: "Escribe el nombre del responsable.")
-            )
-            errors[.signUpEmail] = validator.emailError(for: signUpEmail)
-            errors[.signUpPassword] = validator.passwordError(for: signUpPassword, requiresStrength: true)
-        }
+        errors[.signInEmail] = validator.emailError(for: signInEmail)
+        errors[.signInPassword] = validator.passwordError(for: signInPassword, requiresStrength: false)
 
         fieldErrors = errors
         focusRequest = fieldOrder.first { errors[$0] != nil }
         return errors.isEmpty
     }
 
-    private var fieldOrder: [Field] {
-        switch mode {
-        case .signIn: [.signInEmail, .signInPassword]
-        case .signUp: [.churchName, .leaderName, .signUpEmail, .signUpPassword]
-        }
-    }
+    private let fieldOrder: [Field] = [.signInEmail, .signInPassword]
 
     /// API field errors go under their field; anything else goes to the banner.
     private func show(_ error: AuthError) {
@@ -212,13 +137,9 @@ final class AuthViewModel {
     }
 
     private func field(forAPIKey key: String) -> Field? {
-        switch (mode, key) {
-        case (.signIn, "email"): .signInEmail
-        case (.signIn, "password"): .signInPassword
-        case (.signUp, "churchName"): .churchName
-        case (.signUp, "fullName"): .leaderName
-        case (.signUp, "email"): .signUpEmail
-        case (.signUp, "password"): .signUpPassword
+        switch key {
+        case "email": .signInEmail
+        case "password": .signInPassword
         default: nil
         }
     }

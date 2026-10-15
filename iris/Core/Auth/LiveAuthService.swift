@@ -38,17 +38,6 @@ struct LiveAuthService: AuthService {
         )
     }
 
-    func signUp(_ request: SignUpRequest) async throws -> UserSession {
-        try await authenticate(
-            APIRequest(
-                .post,
-                "/auth/sign-up",
-                body: SignUpBody(churchName: request.churchName, fullName: request.fullName, email: request.email, password: request.password, client: clientInfo),
-                requiresAuth: false
-            )
-        )
-    }
-
     func signOut() async {
         // Without network the API session stays open until it expires; the device forgets it anyway.
         try? await client.sendVoid(APIRequest(.post, "/auth/sign-out"))
