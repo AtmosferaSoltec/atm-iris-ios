@@ -39,7 +39,7 @@ struct HomeViewModelTests {
         viewModel.openPeople()
         viewModel.openModules()
         let selected = try #require(viewModel.selectedServiceType)
-        viewModel.startSelectedService()
+        await viewModel.startSelectedService()
 
         #expect(log.routes == [.services, .times, .people, .modules, .console(selected)])
     }
@@ -121,8 +121,73 @@ struct HomeViewModelTests {
         #expect(viewModel.needsServiceSetup)
         #expect(viewModel.selectedServiceType == nil)
 
-        viewModel.startSelectedService()
+        await viewModel.startSelectedService()
         viewModel.openServices()
         #expect(log.routes == [.services])
+    }
+
+    /// Records what the sync was asked, and can take forever (a church WiFi that is down).
+    private final class ScriptedSync: SyncService {
+        var status: SyncStatus = .idle(lastSync: nil)
+        var initialSync: InitialSyncState = .ready
+        var pendingCount = 0
+        var notice: String?
+        var storageWarning: String?
+        var reasons: [SyncReason] = []
+        var neverFinishes = false
+        let log: RouteLog
+
+        init(log: RouteLog) { self.log = log }
+
+        func start(session: UserSession) async {}
+        func syncNow(reason: SyncReason) async {
+            reasons.append(reason)
+            if neverFinishes { try? await Task.sleep(for: .seconds(60)) }
+        }
+        func flushSoon() {}
+        func suspend() {}
+        func resume() {}
+        func dismissNotice() {}
+        func discardLocalData() async {}
+    }
+
+    private func makeViewModel(store: InMemoryChurchStore, sync: any SyncService) -> HomeViewModel {
+        let log = log
+        return HomeViewModel(
+            session: .preview,
+            moduleSettings: MockModuleSettingsRepository(store: store, latency: .zero),
+            serviceTypes: MockServiceTypeRepository(store: store, latency: .zero),
+            people: MockPeopleRepository(store: store, latency: .zero),
+            timeRecords: MockTimeRecordRepository(store: store, latency: .zero),
+            libraryRepository: MockLibraryRepository(latency: .zero),
+            displayOutput: MockDisplayOutputService(),
+            sync: sync,
+            onNavigate: { log.routes.append($0) }
+        )
+    }
+
+    @Test func startingAServiceFirstCatchesUpWithTheWeb() async throws {
+        let sync = ScriptedSync(log: log)
+        let viewModel = makeViewModel(store: InMemoryChurchStore(), sync: sync)
+        await viewModel.appear()
+        sync.reasons.removeAll()
+
+        await viewModel.startSelectedService()
+
+        #expect(sync.reasons == [.beforeService])
+        #expect(log.routes.count == 1)
+    }
+
+    @Test func startingAServiceDoesNotWaitForeverWithoutConnection() async throws {
+        let sync = ScriptedSync(log: log)
+        sync.neverFinishes = true
+        let viewModel = makeViewModel(store: InMemoryChurchStore(), sync: sync)
+        await viewModel.appear()
+
+        let started = ContinuousClock.now
+        await viewModel.startSelectedService()
+
+        #expect(ContinuousClock.now - started < .seconds(8))
+        #expect(log.routes.count == 1)
     }
 }

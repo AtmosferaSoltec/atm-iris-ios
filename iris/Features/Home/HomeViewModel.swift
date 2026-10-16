@@ -259,9 +259,38 @@ final class HomeViewModel {
         selectedServiceTypeID = id
     }
 
-    func startSelectedService() {
-        guard let selectedServiceType else { return }
+    /// How long "Iniciar servicio" waits for the web's latest changes before opening the console anyway.
+    static let catchUpTimeout: Duration = .seconds(4)
+
+    /// `true` while "Iniciar servicio" catches up with the web, so a second tap does nothing.
+    private(set) var isStartingService = false
+
+    /// The console works with the copy it has when it opens (sync pauses during a service), and Home syncs only
+    /// every few minutes: without this, whatever the web changed in the meantime would be missing all service.
+    /// So pull first. Offline or slow, it opens anyway with what is already on this iPad.
+    func startSelectedService() async {
+        guard let selectedServiceType, !isStartingService else { return }
+        isStartingService = true
+        defer { isStartingService = false }
+        await catchUpWithTheWeb()
         onNavigate(.console(selectedServiceType))
+    }
+
+    private func catchUpWithTheWeb() async {
+        let sync = sync
+        let timeout = Self.catchUpTimeout
+        let finished = AsyncStream<Void>.makeStream()
+        Task {
+            await sync.syncNow(reason: .beforeService)
+            finished.continuation.yield()
+            finished.continuation.finish()
+        }
+        Task {
+            try? await Task.sleep(for: timeout)
+            finished.continuation.yield()
+            finished.continuation.finish()
+        }
+        for await _ in finished.stream { return }
     }
 
     func openServices() {

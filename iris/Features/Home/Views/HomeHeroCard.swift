@@ -142,11 +142,11 @@ struct HomeHeroCard: View {
             serviceTypePicker
 
             Button {
-                viewModel.startSelectedService()
+                Task { await viewModel.startSelectedService() }
             } label: {
                 Label("Iniciar servicio", systemImage: "play.fill")
             }
-            .buttonStyle(.irisPrimary)
+            .buttonStyle(.irisPrimary(isLoading: viewModel.isStartingService))
             .frame(width: 280)
             .disabled(viewModel.selectedServiceType == nil)
         }

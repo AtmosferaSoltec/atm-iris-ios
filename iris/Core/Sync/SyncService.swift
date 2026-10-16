@@ -28,6 +28,8 @@ nonisolated enum InitialSyncState: Equatable, Sendable {
 /// Why a sync was asked for (contract §12).
 nonisolated enum SyncReason: String, Sendable {
     case launch, returnedHome, periodic, reconnected, manual, rejectedWrite
+    /// "Iniciar servicio": catch up with the web before the console freezes the local copy.
+    case beforeService
 }
 
 /// Keeps the local copy up to date and sends queued writes. The console pauses it during a service.
