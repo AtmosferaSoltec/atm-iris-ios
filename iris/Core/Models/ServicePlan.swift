@@ -28,9 +28,13 @@ nonisolated struct ServiceItem: Identifiable, Equatable, Sendable {
     /// The song behind a `.song` item, so it can be adelantado and found again in the plan
     /// (contract §15). `nil` for text typed by hand and sample data.
     var songID: UUID?
-    /// The library file behind music, image and video items, so the console can follow its
-    /// download and pick up the file once it is on this iPad. `nil` for text and sample data.
+    /// The library file behind music, image and video items — and a song's track — so the console
+    /// can follow its download and pick up the file once it is on this iPad. `nil` for text and
+    /// sample data.
     var mediaID: String?
+    /// The track of a song that also has lyrics: it plays in the room while the slides go to the
+    /// TV. A song that is only a track is a `.music` item instead.
+    var track: ServiceTrack?
     /// The row in the service plan this item came from (or was saved to), so moving or removing
     /// it here also updates it there. `nil` for items never adelantados: the Bible and the logo,
     /// which stay only for the length of this service.
@@ -44,6 +48,7 @@ nonisolated struct ServiceItem: Identifiable, Equatable, Sendable {
         slides: [Slide],
         songID: UUID? = nil,
         mediaID: String? = nil,
+        track: ServiceTrack? = nil,
         planItemID: UUID? = nil
     ) {
         self.id = id
@@ -53,8 +58,18 @@ nonisolated struct ServiceItem: Identifiable, Equatable, Sendable {
         self.slides = slides
         self.songID = songID
         self.mediaID = mediaID
+        self.track = track
         self.planItemID = planItemID
     }
+}
+
+/// A song's track inside the service (contract §10): ready to play, never automatically.
+nonisolated struct ServiceTrack: Equatable, Sendable {
+    var title: String
+    /// "3:45", or empty when unknown.
+    var duration: String
+    /// The cached file; `nil` while it is not on this iPad (or in sample data).
+    var url: URL?
 }
 
 /// Which library item a plan row points at (contract §15).
@@ -63,12 +78,39 @@ nonisolated enum PlanItemKind: Sendable {
 }
 
 nonisolated extension ServiceItem {
-    /// Builds a song item from the library, with a stable reference back to it.
+    /// Builds a song item from the library, with a stable reference back to it. Its track comes
+    /// along: a song with lyrics carries it as `track`; a song that is only a track plays like music.
     init(lyric: LyricSheet) {
-        self.init(kind: .song, title: lyric.title, subtitle: lyric.author, slides: lyric.sections, songID: lyric.id)
+        guard let audio = lyric.audio else {
+            self.init(kind: .song, title: lyric.title, subtitle: lyric.author, slides: lyric.sections, songID: lyric.id)
+            return
+        }
+        let duration = audio.duration ?? ""
+        let subtitle = [lyric.author, duration].filter { !$0.isEmpty }.joined(separator: " · ")
+        if lyric.sections.isEmpty {
+            self.init(
+                kind: .music,
+                title: lyric.title,
+                subtitle: subtitle,
+                slides: [Slide(content: .audio(title: lyric.title, duration: duration, url: audio.localURL))],
+                songID: lyric.id,
+                mediaID: audio.id
+            )
+        } else {
+            self.init(
+                kind: .song,
+                title: lyric.title,
+                subtitle: subtitle,
+                slides: lyric.sections,
+                songID: lyric.id,
+                mediaID: audio.id,
+                track: ServiceTrack(title: lyric.title, duration: duration, url: audio.localURL)
+            )
+        }
     }
 
-    /// Builds a music, image or video item from the library, with a stable reference back to it.
+    /// Builds an image or video item from the library, with a stable reference back to it. (Audio
+    /// only reaches the service inside its song, `init(lyric:)`.)
     init(asset: MediaAsset) {
         switch asset.kind {
         case .music:
@@ -96,6 +138,12 @@ nonisolated extension ServiceItem {
                 mediaID: asset.id
             )
         }
+    }
+
+    /// The cached file behind the item: its track, or its media slide. `nil` for text or while the
+    /// file is not on this iPad.
+    var fileURL: URL? {
+        track?.url ?? slides.first?.content.url
     }
 
     /// `(kind, refID)` for the service plan (contract §15); `nil` for an item never adelantado

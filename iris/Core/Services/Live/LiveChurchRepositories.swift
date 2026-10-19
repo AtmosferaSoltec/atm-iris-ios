@@ -135,8 +135,9 @@ struct LivePeopleRepository: PeopleRepository {
     }
 }
 
-/// What the web (or another console) adelantó for the next service (contract §15): songs and
-/// media, resolved against the library like `AddToServiceViewModel` resolves a pick.
+/// What the web (or another console) adelantó for the next service (contract §15): songs (with
+/// their tracks) and images or videos, resolved against the library like `AddToServiceViewModel`
+/// resolves a pick.
 struct LiveServicePlanRepository: ServicePlanRepository {
     let data: LiveChurchData
     let library: any LibraryRepository
@@ -148,7 +149,7 @@ struct LiveServicePlanRepository: ServicePlanRepository {
         var items: [ServiceItem] = []
         if !entries.isEmpty {
             let lyrics = (try? await library.lyrics()) ?? []
-            let media = await library.music() + (await library.uploadedMedia())
+            let media = await library.uploadedMedia()
             items = entries.compactMap { Self.resolve($0, lyrics: lyrics, media: media) }
         }
         return ServicePlan(id: UUID(), title: String(localized: "Servicio"), date: data.now(), items: items)

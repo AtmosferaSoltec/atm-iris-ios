@@ -2,7 +2,7 @@
 //  LibraryTabsTests.swift
 //  irisTests
 //
-//  Letras · Música · Multimedia, all uploaded on the web.
+//  Canciones (lyrics and their tracks) · Multimedia, all uploaded on the web.
 //
 
 import Foundation
@@ -13,35 +13,51 @@ import Testing
 struct LibraryTabsTests {
     private func loaded(mode: AddToServiceViewModel.Mode = .picker) -> AddToServiceViewModel {
         let viewModel = AddToServiceViewModel(repository: MockLibraryRepository(latency: .zero), mode: mode)
-        let sample = MockLibraryRepository.sampleMedia
         viewModel.apply(
             lyrics: MockLibraryRepository.sampleLyrics,
-            music: sample.filter { $0.kind == .music },
-            media: sample.filter { $0.kind != .music }
+            media: MockLibraryRepository.sampleMedia.filter { $0.kind != .music }
         )
         return viewModel
     }
 
-    @Test func hasThreeTabs() {
-        #expect(AddToServiceViewModel.Tab.allCases == [.lyrics, .music, .media])
+    private func sheet(_ title: String) throws -> LyricSheet {
+        try #require(MockLibraryRepository.sampleLyrics.first { $0.title == title })
     }
 
-    @Test func musicIsFoundByNameOnly() {
-        let viewModel = loaded()
-        viewModel.tab = .music
-        viewModel.query = "preludio"
-        #expect(viewModel.filteredMusic.map(\.title) == ["Preludio en Re"])
-        // "Órgano" is only in the subtitle, not in the name.
-        viewModel.query = "organo"
-        #expect(viewModel.filteredMusic.isEmpty)
+    @Test func hasTwoTabs() {
+        #expect(AddToServiceViewModel.Tab.allCases == [.songs, .media])
     }
 
-    @Test func multimediaHasImagesAndVideosAndMusicHasItsOwnTab() async throws {
-        let repository = MockLibraryRepository(latency: .zero)
-        let uploaded = await repository.uploadedMedia()
+    @Test func aSongWithLyricsBringsItsTrack() throws {
+        let item = ServiceItem(lyric: try sheet("Sublime gracia"))
+        #expect(item.kind == .song)
+        #expect(item.slides.count == 2)
+        #expect(item.mediaID == "m5")
+        #expect(item.track?.duration == "4:32")
+        // The plan keeps the song, never the loose track.
+        #expect(item.planReference?.kind == .song)
+    }
+
+    @Test func aSongThatIsOnlyATrackPlaysLikeMusic() throws {
+        let song = try sheet("Piano de fondo")
+        #expect(song.isTrackOnly)
+        let item = ServiceItem(lyric: song)
+        #expect(item.kind == .music)
+        #expect(item.track == nil)
+        #expect(item.mediaID == "m1")
+        #expect(item.songID == song.id)
+        #expect(item.planReference?.kind == .song)
+    }
+
+    @Test func aSongOnlyWithLyricsHasNoFile() throws {
+        let item = ServiceItem(lyric: try sheet("Castillo fuerte"))
+        #expect(item.mediaID == nil)
+        #expect(item.track == nil)
+    }
+
+    @Test func multimediaHasImagesAndVideosOnly() async throws {
+        let uploaded = await MockLibraryRepository(latency: .zero).uploadedMedia()
         #expect(Set(uploaded.map(\.kind)) == [.image, .video])
-        #expect(await repository.music().allSatisfy { $0.kind == .music })
-        #expect(await !repository.music().isEmpty)
     }
 
     @Test func backgroundsAreNotListedInMultimedia() async {
@@ -63,25 +79,26 @@ struct LibraryTabsTests {
         #expect(viewModel.selectionCount == 0)
     }
 
-    @Test func aSelectedSongCanBeAddedToTheService() {
+    @Test func aSelectedSongCanBeAddedToTheService() throws {
         let viewModel = loaded()
-        viewModel.toggle(.media("m1"))
+        viewModel.toggle(.lyric(try sheet("Sublime gracia").id))
         #expect(viewModel.selectionCount == 1)
     }
 
-    @Test func musicStillInTheCloudCanBeAddedAndKeepsItsLibraryID() throws {
-        var track = MockLibraryRepository.sampleMedia[0]
-        track.downloadState = .notDownloaded
+    @Test func aTrackStillInTheCloudCanBeAddedAndKeepsItsLibraryID() throws {
+        var song = try sheet("Sublime gracia")
+        song.audio?.downloadState = .notDownloaded
+        song.audio?.localURL = nil
         var added: [ServiceItem] = []
         let picker = AddToServiceViewModel(repository: MockLibraryRepository(latency: .zero)) { added = $0 }
-        picker.apply(lyrics: [], music: [track], media: [])
-        picker.toggle(.media(track.id))
+        picker.apply(lyrics: [song], media: [])
+        picker.toggle(.lyric(song.id))
         picker.confirm()
 
         let item = try #require(added.first)
-        #expect(item.kind == .music)
-        #expect(item.mediaID == track.id)
-        #expect(item.slides.first?.content.url == nil)
+        #expect(item.mediaID == "m5")
+        #expect(item.track != nil)
+        #expect(item.fileURL == nil)
     }
 
     @Test func cachedFileNamesGiveBackTheMediaID() {

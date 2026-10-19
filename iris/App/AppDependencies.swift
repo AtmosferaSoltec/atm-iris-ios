@@ -82,7 +82,9 @@ struct AppDependencies {
         // Nothing reads that folder any more and Files no longer shows it, so it only took space.
         try? FileManager.default.removeItem(at: URL.documentsDirectory.appending(path: "Música", directoryHint: .isDirectory))
 
-        // Media files follow each sync, in the background, only with the Multimedia module.
+        // Media files follow each sync, in the background: images, videos and backgrounds with the
+        // Multimedia module; song tracks always (contract §6). What is in the plan downloads now, so
+        // the console opens with it ready — whether the web, this iPad or another console added it.
         let mediaCache = MediaCache(client: client, downloader: .shared)
         Task {
             await mediaCache.setHandlers(
@@ -99,11 +101,13 @@ struct AppDependencies {
         sync.afterSync.append {
             guard let churchID = await localStore.churchID() else { return }
             let church = await localStore.all(.church, as: ChurchDTO.self).first
-            guard church?.modules.multimedia ?? true else { return }
+            let showsMultimedia = church?.modules.multimedia ?? true
             let assets = await localStore.all(.media, as: MediaAssetDTO.self)
+                .filter { showsMultimedia || $0.kind == .audio }
+            let planIDs = await Self.planFileIDs(in: localStore)
             Task {
                 await mediaCache.use(churchID: churchID)
-                await mediaCache.ensureDownloaded(assets)
+                await mediaCache.ensureDownloaded(assets, requesting: planIDs)
             }
         }
         sync.onDiscard.append { await mediaCache.clear() }
@@ -141,6 +145,17 @@ struct AppDependencies {
                 currentVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.0"
             )
         )
+    }
+
+    /// The files the plan needs (contract §15): its images and videos, and the tracks of its songs.
+    private static func planFileIDs(in store: LocalStore) async -> [String] {
+        let plan = await store.all(.servicePlan, as: ServicePlanItemDTO.self)
+        guard !plan.isEmpty else { return [] }
+        let songIDs = Set(plan.filter { $0.kind == .song }.map(\.refId))
+        let tracks = await store.all(.songs, as: SongDTO.self)
+            .filter { songIDs.contains($0.id) }
+            .compactMap { $0.audio?.id }
+        return plan.filter { $0.kind == .media }.map(\.refId) + tracks
     }
 
     /// The on-disk copy; if it cannot be opened (corrupt or full disk), a temporary one so the app still starts.

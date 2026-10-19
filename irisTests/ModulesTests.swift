@@ -102,17 +102,18 @@ struct ModulesTests {
         #expect(viewModel.biblePicker == nil)
     }
 
-    @Test func consoleWithoutMultimediaOnlyOffersLyrics() {
+    @Test func consoleWithoutMultimediaOnlyOffersSongs() {
         let viewModel = console(modules: ChurchModules(bible: true, multimedia: false, timeControl: true))
 
         #expect(viewModel.showsMultimedia == false)
-        #expect(viewModel.items.contains { [.music, .image, .video].contains($0.kind) } == false)
+        // Images and videos go; songs (and their tracks) stay.
+        #expect(viewModel.items.contains { [.image, .video].contains($0.kind) } == false)
         #expect(viewModel.items.isEmpty == false)
 
         viewModel.presentAddToService()
-        #expect(viewModel.addSheet?.tabs == [.lyrics])
-        #expect(viewModel.addSheet?.tab == .lyrics)
-        #expect(viewModel.addSheet?.isLyricsOnly == true)
+        #expect(viewModel.addSheet?.tabs == [.songs])
+        #expect(viewModel.addSheet?.tab == .songs)
+        #expect(viewModel.addSheet?.isSongsOnly == true)
     }
 
     @Test func homeHandsItsModulesToTheConsoleAfterRefresh() async throws {

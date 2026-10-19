@@ -18,7 +18,10 @@ nonisolated struct SongDTO: Codable, Hashable, Sendable {
     let title: String
     let author: String
     let copyright: String?
+    /// Empty when the song is only a track.
     let sections: [SongSectionDTO]
+    /// The song's track (contract §10); `nil` when it is only lyrics, and in copies saved before tracks.
+    let audio: MediaAssetDTO?
     let createdAt: Date
     let updatedAt: Date
 }
@@ -29,6 +32,7 @@ nonisolated struct SongSummaryDTO: Codable, Hashable, Sendable {
     let author: String
     let sectionCount: Int
     let firstLine: String?
+    let audio: MediaAssetDTO?
     let updatedAt: Date
 }
 

@@ -369,12 +369,12 @@ Flujo: **Login → Inicio → "Iniciar servicio" → Consola**. Desde el Inicio 
 - **Tarjetas (`IrisTile`)**: icono con tinte, título, subtítulo, contenido opcional y "›". **Al hacer clic navegan**: Servicios → §6.8 · Tiempos → §6.10 · Personas → §6.7 · Módulos → §6.6. Biblioteca aún no navega.
   - **Tiempos** (solo con módulo de tiempo): **solo el encabezado** — icono `timer` coral, "Tiempos" y "{N} servicios registrados" ("1 servicio registrado" / "Aún no hay registros"). Sin gráfico ni métricas: los datos están en la pantalla Tiempos.
   - **Servicios**: lista de tipos con punto de color y chip "⏱ Con tiempos" (verde) o "Solo proyección".
-  - **Biblioteca**: contadores 2×2 (Letras, Música, Imágenes, Videos; los de multimedia se ocultan si el módulo está apagado).
+  - **Biblioteca**: contadores (Canciones, Con pista, Multimedia; Multimedia se oculta si el módulo está apagado).
   - **Personas** (solo con módulo de tiempo): avatares superpuestos con iniciales (colores del espectro) + "+3" y "{N} personas registradas".
   - **Módulos**: Letras, Biblia, Multimedia, Control de tiempo con punto verde "Activo" / gris "Apagado".
 - Layout: fila 1 **Servicios · Biblioteca** (iguales); fila 2 **Tiempos · Personas · Módulos** (iguales). Sin control de tiempo: una sola fila **Servicios · Biblioteca · Módulos**. Las tarjetas de cada fila igualan su alto. Contenido máx. 1280 centrado (`IrisSize.contentWidth`).
 
-**Modelos de la iglesia** (detalle en §9): `Person {id, name, initials}` · `ChurchModules {bible, multimedia, timeControl}` (Letras siempre activo) · `ServiceType {id, name, color, schedule?(weekday 1=dom, hour, minute), blocks: [BlockTemplate]}` · `BlockTemplate {id, name, plannedMinutes, defaultPersonId?}` · `ServiceRecord {id, date, serviceTypeId, blocks: [BlockRecord]}` · `BlockRecord {name, plannedSeconds, actualSeconds, personId?, personName?, status: completed|skipped|adjusted}`. **Exceso = real − previsto si > 0, sin margen de tolerancia.**
+**Modelos de la iglesia** (detalle en §9): `Person {id, name, initials}` · `ChurchModules {bible, multimedia, timeControl}` (Canciones siempre activo: letra y pista) · `ServiceType {id, name, color, schedule?(weekday 1=dom, hour, minute), blocks: [BlockTemplate]}` · `BlockTemplate {id, name, plannedMinutes, defaultPersonId?}` · `ServiceRecord {id, date, serviceTypeId, blocks: [BlockRecord]}` · `BlockRecord {name, plannedSeconds, actualSeconds, personId?, personName?, status: completed|skipped|adjusted}`. **Exceso = real − previsto si > 0, sin margen de tolerancia.**
 
 **Interfaces nuevas**: `IModuleSettingsRepository`, `IServiceTypeRepository`, `IPeopleRepository`, `ITimeRecordRepository` (mocks `MockModuleSettingsRepository`, `MockServiceTypeRepository`, `MockPeopleRepository`, `MockTimeRecordRepository`, todos sobre un único `InMemoryChurchStore` compartido; datos de ejemplo en `MockChurchData`). Métodos de escritura: `save(modules)`; `save(type)`/`delete(id)`; `add(name)`/`rename(id,to:)`/`delete(id)`; `save(record)`/`delete(id)`. `BlockRecord.personName` guarda el nombre al momento de registrar. Datos en §11 (3 tipos de servicio, 8 personas, 10 registros de los últimos domingos).
 
@@ -403,13 +403,13 @@ Pill **"‹ Inicio"** · `IrisWordmark (24)` · separador vertical 1×28 · tít
   - **Deslizar a la izquierda** → "Eliminar".
   - **Mantener presionado** → menú: "Duplicar", "Mover arriba", "Mover abajo", —, "Eliminar".
   - **Arrastrar** → reordenar.
-- Vacío: "Servicio vacío" / "Toca Agregar para sumar letras, música, imágenes o videos." (sin Multimedia: "Toca Agregar para sumar letras.")
+- Vacío: "Servicio vacío" / "Toca Agregar para sumar canciones, imágenes o videos." (sin Multimedia: "Toca Agregar para sumar canciones.")
 - Abajo: botón pill **"+ Agregar"** (ancho completo) → abre §6.4.
 - Confirmación de vaciar: título "¿Vaciar el servicio?", botón destructivo "Quitar {N} elementos", mensaje "Esta acción no se puede deshacer."
 
 **b) Tarjeta EN VIVO** (`IrisSurface`, padding 12)
 - `LiveScreenView`: `ProjectionCanvas` del **frame actual del TV** (con el fondo elegido), borde `strokeStrong`, radio `md`, **badge "EN VIVO"** arriba a la izquierda. Nada más debajo.
-- **Mini reproductor** (`NowPlayingView`) — aparece debajo **solo mientras suena música o video**, con transición desde abajo (nunca con el módulo Multimedia apagado):
+- **Mini reproductor** (`NowPlayingView`) — aparece debajo **solo mientras suena una pista o un video**, con transición desde abajo (las pistas suenan aunque el módulo Multimedia esté apagado):
   - Icono del tipo (música verde / video rosa) animado mientras suena + título + estado: "Sonando en el salón" (música) / "Reproduciendo en el TV" (video) / "En pausa".
   - Barra de avance arrastrable (tinte coral) + tiempos "0:52" y "-1:53" (monoespaciados).
   - Controles: ⏮ "Desde el inicio" · ⏯ "Pausar/Reproducir" (botón activo coral, un poco más grande) · ⏹ "Detener" · 🔁 "Repetir" (activo = coral).
@@ -419,13 +419,14 @@ Pill **"‹ Inicio"** · `IrisWordmark (24)` · separador vertical 1×28 · tít
 Si el servicio controla tiempo, encima del espacio de trabajo va la **franja del cronómetro de bloques** (§6.9), separada 16.
 
 **Encabezado**:
-- Izquierda: `IrisChip` del tipo (icono + "Letra"/"Pasaje"/"Anuncio"/"Música"/"Imagen"/"Video" con su color) · título (`title`, serif) · subtítulo (autor / traducción / "Video · 2:45").
+- Izquierda: `IrisChip` del tipo (icono + "Canción"/"Pasaje"/"Anuncio"/"Pista"/"Imagen"/"Video" con su color) · título (`title`, serif) · subtítulo (autor / traducción / "Video · 2:45").
 - Derecha (barra de herramientas, iconos redondos de vidrio):
   - Solo en modo Biblia: **‹** "Versículo anterior" y **›** "Versículo siguiente" (deshabilitados en los extremos; flechas ← → del teclado), y un separador.
   - **Borrador** (`eraser`) "Limpiar pantalla": conmuta; activo = coral. Deja en el TV solo el fondo.
   - **Fondo** (`photo.on.rectangle`) "Cambiar fondo": abre un **popover/flyout** con la cuadrícula de fondos (§6.5).
   - **Biblia** (`book.closed`): abre §6.3. Oculto si el módulo Biblia está apagado.
-  - Pill **"Editar"** (lápiz) — sin acción aún; oculto en modo Biblia.
+  - Si la canción tiene **letra y pista**: pill **"Pista"** (▶/⏸ + duración, verde) al inicio de la barra. Reproduce o pausa la pista en el salón con el mini reproductor; el TV no cambia y nunca suena sola. Mientras se descarga muestra el progreso (deshabilitado); si falló, "Reintentar pista".
+  - Sin "Editar": la consola es de solo lectura. Las canciones (letra y pista) se crean y editan en la web.
 
 **Contenido según el tipo del elemento abierto**:
 
@@ -435,10 +436,10 @@ Si el servicio controla tiempo, encima del espacio de trabajo va la **franja del
    - La que está en el TV: borde **`accent` 3 px** + sombra coral. Las demás: borde `stroke`. **Sin badges** "EN VIVO"/"SIGUIENTE".
    - **Clic** en una tarjeta → va al TV.
    - Al cambiar lo que está en vivo, la cuadrícula se desplaza para mantener visible esa tarjeta (útil en capítulos largos).
-2. **Música, Video o Imagen** → **escenario de multimedia** (`MediaStageView`), centrado:
+2. **Canción solo pista, Video o Imagen** → **escenario de multimedia** (`MediaStageView`), centrado:
    - Tarjeta grande (máx. 640) con la vista previa; activa = borde `accent` 3 px + badge "REPRODUCIENDO" (música/video) o "EN PANTALLA" (imagen).
    - Botón primario de 300: "Reproducir" / "Reproduciendo" (música/video) · "Mostrar en el TV" / "En pantalla" (imagen). Deshabilitado si ya está activo.
-   - Pista: Música → "La música suena en el salón; el TV no cambia. Contrólala desde el reproductor." · Video → "El video se muestra en el TV. Contrólalo desde el reproductor bajo la pantalla en vivo." · Imagen → "La imagen se muestra a pantalla completa en el TV."
+   - Pista: Pista → "La pista suena en el salón; el TV no cambia. Contrólala desde el reproductor." · Video → "El video se muestra en el TV. Contrólalo desde el reproductor bajo la pantalla en vivo." · Imagen → "La imagen se muestra a pantalla completa en el TV."
    - **Un clic** en la tarjeta o en el botón presenta (sin doble clic).
 3. Nada seleccionado → "Selecciona un elemento".
 
@@ -457,12 +458,11 @@ Flujo en 3 pasos dentro del mismo modal:
 
 ### 6.4 Agregar al servicio (modal grande "page")
 
-- Encabezado: "Agregar al servicio" / "Elige letras, música, imágenes o videos de tu biblioteca." + cerrar.
-- Segmentado con **4 tabs: Letras · Música · Imágenes · Videos**. Sin el módulo Multimedia solo existe Letras: se oculta el segmentado y el subtítulo dice "Elige letras de tu biblioteca."
+- Encabezado: "Agregar al servicio" / "Elige canciones o multimedia para tu servicio." + cerrar.
+- Segmentado con **2 tabs: Canciones · Multimedia**. Una canción trae su letra y su pista juntas (contrato §10). Sin el módulo Multimedia solo existe Canciones: se oculta el segmentado y el subtítulo dice "Elige canciones de tu biblioteca."
 - Campo "Buscar" (placeholder "Título, autor o descripción"), filtra el tab actual sin acentos/mayúsculas.
 - Contenido:
-  - **Letras**: filas (`LibraryRow`): icono "Letra" (ámbar) · título · autor · **primer verso en serif cursiva** · checkmark.
-  - **Música**: filas: icono música (verde) · título · descripción · **duración** (monoespaciada) · checkmark.
+  - **Canciones**: filas (`LibraryRow`): icono "Canción" (ámbar; nota verde si es solo pista) · título · autor (o "Solo pista") · si tiene pista: nota verde + **duración** (monoespaciada) o el estado de descarga, y ▶ para escuchar unos segundos · checkmark.
   - **Imágenes**: cuadrícula adaptativa (mín. 200) de miniaturas 16:9 + nombre + "JPG · 1920 × 1080"; checkmark arriba a la derecha.
   - **Videos**: igual, con ▶ al centro y **duración** en cápsula negra abajo a la derecha.
   - Seleccionado: borde `accent` (1.5 en filas, 3 en miniaturas) + checkmark encendido.
@@ -485,9 +485,9 @@ Flujo en 3 pasos dentro del mismo modal:
 
 | Módulo | Icono | Descripción | Toggle |
 |---|---|---|---|
-| Letras | `text.quote` (`ember`) | "Proyecta letras de canciones y anuncios. Siempre activo." | encendido y deshabilitado |
+| Canciones | `text.quote` (`ember`) | "La letra que se proyecta y la pista que suena en el salón, juntas. Siempre activo." | encendido y deshabilitado |
 | Biblia | `book.closed.fill` (`violet`) | "Busca y proyecta versículos por libro, capítulo y versículo." | sí |
-| Multimedia | `play.rectangle.fill` (`rose`) | "Música, imágenes y videos en la biblioteca y el reproductor." | sí |
+| Multimedia | `play.rectangle.fill` (`rose`) | "Imágenes y videos en la biblioteca y el reproductor." | sí |
 | Control de tiempo | `timer` (`coral`) | "Mide los bloques de cada servicio y guarda sus tiempos." | sí |
 
 - **Guardado inmediato** al cambiar, sin botón Guardar; los guardados se encadenan en orden. Si uno falla, el interruptor vuelve atrás y aparece un banner de error ("Algo salió mal. Inténtalo de nuevo.").
@@ -587,7 +587,7 @@ Solo con el módulo de tiempo. Encabezado **"Tiempos"** (serif) + segmentado **R
 | Texto (letra, anuncio, versículo) | Se muestra sobre el fondo elegido | Si hay **video** sonando, **se pausa**. La música sigue. |
 | Imagen | A pantalla completa | Igual que texto |
 | Video | Se muestra el video | Empieza (o continúa) la reproducción del video |
-| Música | **No cambia** | Empieza la música (suena en el salón) |
+| Pista (canción solo pista, o "Pista" de una canción con letra) | **No cambia** | Empieza la pista (suena en el salón) |
 
 - Presentar algo **desactiva "Limpiar pantalla"**.
 - Volver a presentar el mismo medio que ya está cargado solo lo reanuda (no lo reinicia).
@@ -621,7 +621,7 @@ Solo en vistas previas (consola sin tipo de servicio): se abre el **2.º element
 | Módulo apagado | Efecto |
 |---|---|
 | Biblia | Sin botón Biblia en la consola. |
-| Multimedia | Agregar solo ofrece Letras (sin segmentado); los elementos de música, imagen y video no aparecen en el servicio; el mini reproductor nunca aparece; Biblioteca (Inicio) solo cuenta Letras. |
+| Multimedia | Agregar solo ofrece Canciones (sin segmentado); las imágenes y videos no aparecen en el servicio; las pistas de las canciones sí suenan; Biblioteca (Inicio) oculta Multimedia. |
 | Control de tiempo | Desaparecen las tarjetas Tiempos y Personas y sus pantallas; los servicios se ven "Solo proyección"; no hay cronómetro; el editor de servicios oculta los bloques sin borrarlos. Los tiempos guardados se conservan. |
 
 - La consola recibe los módulos al iniciar el servicio; no cambian mientras dura.
@@ -738,7 +738,7 @@ Playback    { ItemId, Kind, Title, Duration (s), Elapsed (s), IsPlaying, IsLoopi
 RemovedItem { Item, Index }
 
 Person          { Id, Name, Initials (derivado) }
-ChurchModules   { Bible, Multimedia, TimeControl }              // Letras siempre activo
+ChurchModules   { Bible, Multimedia, TimeControl }              // Canciones (letra y pista) siempre activo
 ServiceType     { Id, Name, Color (hex), Schedule?, Blocks: [BlockTemplate], TracksTime (derivado: Blocks no vacío) }
   Schedule = { Weekday (1 = dom … 7 = sáb), Hour, Minute }
   Palette  = ámbar #FFB547 · coral #FF7A59 · rosa #F0508C · violeta #9B5CFF · índigo #4E5BFF · verde #3DDC97
@@ -769,16 +769,16 @@ Estilo visual por tipo (`ServiceItem.Kind`):
 
 | Kind | Nombre visible | Icono (SF Symbol → Segoe Fluent Icons aprox.) | Color |
 |---|---|---|---|
-| Song | Letra | `text.quote` → *Quote* | `ember` |
+| Song | Canción | `text.quote` → *Quote* | `ember` |
 | Scripture | Pasaje | `book.closed.fill` → *Library/Bookmarks* | `violet` |
 | Announcement | Anuncio | `megaphone.fill` → *Megaphone* | `indigo` |
-| Music | Música | `music.note` → *MusicNote* | `success` |
+| Music | Pista | `music.note` → *MusicNote* | `success` |
 | Image | Imagen | `photo.fill` → *Photo* | `coral` |
 | Video | Video | `play.rectangle.fill` → *Video* | `rose` |
 
 Conversión de biblioteca → elemento del servicio:
-- Letra → `Song`, subtítulo = autor, diapositivas = secciones.
-- Música → `Music`, subtítulo "{descripción} · {duración}", 1 diapositiva `Audio`.
+- Canción con letra → `Song`, subtítulo = autor (· duración si tiene pista), diapositivas = secciones; su pista va aparte (`track`) y se reproduce con "Pista".
+- Canción solo pista → `Music`, subtítulo "{autor} · {duración}", 1 diapositiva `Audio`. En el plan sigue siendo la canción.
 - Imagen → `Image`, subtítulo = descripción, 1 diapositiva `Image`.
 - Video → `Video`, subtítulo "Video · {duración}", 1 diapositiva `Video`.
 - Pasaje (Biblia) → `Scripture`, título "{Libro} {cap}", subtítulo = traducción, una diapositiva por versículo (label "Versículo N", pie "{Libro} {cap}:{N}").
@@ -830,7 +830,7 @@ Los cuatro mocks de la iglesia son tipos separados porque sus `Delete(id)` recib
 
 **Biblioteca**
 - Letras: Oh, qué amigo nos es Cristo (Joseph M. Scriven) · Roca de la eternidad (Augustus M. Toplady) · Cariñoso Salvador (Charles Wesley) · Sublime gracia (John Newton) · Santo, santo, santo (Reginald Heber) · Castillo fuerte (Martín Lutero).
-- Música: Piano de fondo (6:12) · Preludio en Re (3:40) · Ofrenda · Guitarra acústica (4:05) · Pads de adoración en Sol (10:00) · Sublime gracia (instrumental) (4:32).
+- Pistas: Sublime gracia trae la pista "Sublime gracia (instrumental)" (4:32); "Piano de fondo" (6:12) es una canción solo pista.
 - Imágenes: Logo de la iglesia · Bienvenida · Santa Cena · Bautismos · Jóvenes · Misiones ("JPG · 1920 × 1080").
 - Videos: Testimonios de bautismo (2:45) · Cuenta regresiva (5:00) · Anuncios de octubre (1:30) · Misión en Oaxaca (4:12, 4K) · Video de bienvenida (0:45).
 
@@ -895,7 +895,7 @@ Todos los textos de himnos y Biblia usados son de **dominio público**.
 
 ### 12.5 Sustituciones de texto
 - "Tú diriges todo desde el iPad." → "Tú diriges todo desde tu computadora."
-- "Toca…" → "Haz clic…" ("Haz clic en Agregar para sumar letras, música, imágenes o videos.", "Haz clic en Agregar para sumar letras.", "Haz clic para presentar").
+- "Toca…" → "Haz clic…" ("Haz clic en Agregar para sumar canciones, imágenes o videos.", "Haz clic en Agregar para sumar canciones.", "Haz clic para presentar").
 
 ### 12.6 Salida al TV (segundo monitor)
 - `ProjectionWindow`: ventana **sin bordes, a pantalla completa** en el monitor secundario (`DisplayArea.FindAll()` → elegir el que no es el principal; `AppWindow.SetPresenter(FullScreen)`).
@@ -925,19 +925,19 @@ Todos los textos de himnos y Biblia usados son de **dominio público**.
 
 **Recuperación**: Recupera tu acceso · Escribe el correo de tu iglesia y te enviaremos un enlace para crear una nueva contraseña. · Enviar enlace · Revisa tu correo · Enviamos un enlace a {correo}. Puede tardar un par de minutos en llegar. · Volver a iniciar sesión · Cerrar.
 
-**Consola**: Servicio dominical · Sala principal · 1920 × 1080 · Sin pantalla · Conecta un TV · Cuenta · Cerrar sesión · SERVICIO · Opciones del servicio · Vaciar servicio · ¿Vaciar el servicio? · Quitar {N} elementos · Esta acción no se puede deshacer. · Servicio vacío · Toca Agregar para sumar letras, música, imágenes o videos. · Toca Agregar para sumar letras. · Agregar · Duplicar · Mover arriba · Mover abajo · Eliminar · EN VIVO · Pantalla en vivo · Limpiar pantalla · Cambiar fondo · Biblia · Editar · Versículo anterior · Versículo siguiente · Selecciona un elemento · Envía esta diapositiva al TV · FONDOS · Se quitó «{título}» · Deshacer · No pudimos cargar el servicio. · Reintentar.
+**Consola**: Servicio dominical · Sala principal · 1920 × 1080 · Sin pantalla · Conecta un TV · Cuenta · Cerrar sesión · SERVICIO · Opciones del servicio · Vaciar servicio · ¿Vaciar el servicio? · Quitar {N} elementos · Esta acción no se puede deshacer. · Servicio vacío · Toca Agregar para sumar canciones, imágenes o videos. · Toca Agregar para sumar canciones. · Pista · Pausar pista · Reintentar pista · Agregar · Duplicar · Mover arriba · Mover abajo · Eliminar · EN VIVO · Pantalla en vivo · Limpiar pantalla · Cambiar fondo · Biblia · Versículo anterior · Versículo siguiente · Selecciona un elemento · Envía esta diapositiva al TV · FONDOS · Se quitó «{título}» · Deshacer · No pudimos cargar el servicio. · Reintentar.
 
 **Multimedia**: REPRODUCIENDO · EN PANTALLA · Reproducir · Reproduciendo · Mostrar en el TV · En pantalla · Toca para presentar · (pistas por tipo, §6.2) · Sonando en el salón · Reproduciendo en el TV · En pausa · Desde el inicio · Pausar · Detener · Repetir · Posición.
 
-**Tipos**: Letra · Pasaje · Anuncio · Música · Imagen · Video.
+**Tipos**: Canción · Pasaje · Anuncio · Pista · Imagen · Video.
 
 **Biblia**: Biblia · Elige un libro · Elige un capítulo · Elige un versículo · Reina-Valera 1909 · Antiguo Testamento · Nuevo Testamento · {n} cap. · Atrás · Versículo {N}.
 
-**Agregar**: Agregar al servicio · Elige letras, música, imágenes o videos de tu biblioteca. · Elige letras de tu biblioteca. · Letras · Música · Imágenes · Videos · Buscar · Título, autor o descripción · Seleccionados: {N}.
+**Agregar**: Agregar al servicio · Elige canciones o multimedia para tu servicio. · Elige canciones de tu biblioteca. · Canciones · Multimedia · Solo pista · Buscar · Título, autor o letra · Seleccionados: {N}.
 
 **Inicio**: {fecha} · Buenos días, / Buenas tardes, / Buenas noches, · Todo listo: el TV está conectado. · Conecta el TV antes de comenzar el servicio. · SERVICIO DE HOY · PRÓXIMO SERVICIO · Hoy · {hora} · {N} bloques · {total} · Solo proyección · Iniciar servicio · BLOQUES · Este servicio no controla tiempos: solo proyección. · Crea tu primer servicio · Configura tus tipos de servicio y, si quieres, sus bloques de tiempo. · Configurar servicios · Tiempos · {N} servicios registrados · 1 servicio registrado · Aún no hay registros · Servicios · {N} tipos de servicio · Con tiempos · Biblioteca · Tu contenido · Personas · Responsables de bloques · {N} personas registradas · Módulos · Elige qué usar · Activo · Apagado · Inicio.
 
-**Módulos**: Módulos · Elige qué partes de Iris usa tu iglesia. Lo que apagues desaparece de la consola. · Letras · Proyecta letras de canciones y anuncios. Siempre activo. · Biblia · Busca y proyecta versículos por libro, capítulo y versículo. · Multimedia · Música, imágenes y videos en la biblioteca y el reproductor. · Control de tiempo · Mide los bloques de cada servicio y guarda sus tiempos. · Los tiempos guardados se conservan. Puedes volver a activarlo cuando quieras.
+**Módulos**: Módulos · Elige qué partes de Iris usa tu iglesia. Lo que apagues desaparece de la consola. · Canciones · La letra que se proyecta y la pista que suena en el salón, juntas. Siempre activo. · Biblia · Busca y proyecta versículos por libro, capítulo y versículo. · Multimedia · Imágenes y videos en la biblioteca y el reproductor. · Control de tiempo · Mide los bloques de cada servicio y guarda sus tiempos. · Los tiempos guardados se conservan. Puedes volver a activarlo cuando quieras.
 
 **Personas**: Personas · Quienes dirigen los bloques de tus servicios. · Nueva persona · Nombre y apellido · Agregar · Escribe un nombre. · Ya existe una persona con ese nombre. · {N} bloques · 1 bloque · Renombrar · Cancelar · Guardar · Eliminar · ¿Eliminar a {nombre}? · Sus tiempos guardados se conservan. · Aún no hay personas · Agrega a quienes dirigen la bienvenida, las alabanzas o la prédica.
 
@@ -965,12 +965,12 @@ Formato de fechas/horas siempre en **español** (`es`), independiente del idioma
 - [ ] Acceso: hero con mini TV rotativo, login libre, crear cuenta con validación, recuperación en 2 estados.
 - [ ] Consola: barra superior (servicio, fecha, reloj, estado TV, cuenta).
 - [ ] Columna 1: Servicio (seleccionar, eliminar con hover/Supr/deslizar, menú contextual, reordenar, vaciar con confirmación, estado vacío) + EN VIVO + mini reproductor.
-- [ ] Columna 2: encabezado con chip/título/subtítulo y herramientas (‹ › solo Biblia, borrador, fondos, Biblia, Editar).
+- [ ] Columna 2: encabezado con chip/título/subtítulo y herramientas (‹ › solo Biblia, borrador, fondos, Biblia).
 - [ ] Tarjetas negras con letra blanca, label opcional, solo resaltada la que está en el TV, autoscroll.
-- [ ] Escenario de multimedia para Música / Video / Imagen con un solo clic.
+- [ ] Escenario de multimedia para Pista / Video / Imagen con un solo clic; "Pista" en la barra de una canción con letra y pista.
 - [ ] Reglas de presentación y reproducción (§7.2–7.4).
 - [ ] Biblia en 3 pasos (libro por testamento, sin buscador → capítulo → versículo) y navegación ‹ ›.
-- [ ] Agregar al servicio: 4 tabs (solo Letras sin Multimedia), búsqueda, selección múltiple ordenada, pie con contador.
+- [ ] Agregar al servicio: 2 tabs, Canciones · Multimedia (solo Canciones sin Multimedia), búsqueda, selección múltiple ordenada, pie con contador.
 - [ ] Selector de fondos en flyout.
 - [ ] Toast de deshacer 5 s.
 - [ ] Ventana de proyección a pantalla completa en el segundo monitor.

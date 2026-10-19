@@ -54,16 +54,16 @@ struct ServicesTile: View {
     }
 }
 
-/// Library counts: lyrics, music on this iPad and web uploads. Opens the Biblioteca screen.
+/// Library counts: songs, how many have a track, and web uploads. Opens the Biblioteca screen.
 struct LibraryTile: View {
     let viewModel: HomeViewModel
 
     var body: some View {
         IrisTile("Biblioteca", subtitle: String(localized: "Tu contenido"), systemImage: "square.stack.fill", tint: IrisColor.violet, action: viewModel.openLibrary) {
             LazyVGrid(columns: [GridItem(.flexible(), spacing: IrisSpacing.sm), GridItem(.flexible())], spacing: IrisSpacing.sm) {
-                count(viewModel.library.lyrics, label: "Letras", kind: .song)
+                count(viewModel.library.lyrics, label: "Canciones", kind: .song)
+                count(viewModel.library.tracks, label: "Con pista", kind: .music)
                 if viewModel.modules.multimedia {
-                    count(viewModel.library.music, label: "Música", kind: .music)
                     count(viewModel.library.media, label: "Multimedia", kind: .image)
                 }
             }

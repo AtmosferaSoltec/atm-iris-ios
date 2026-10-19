@@ -113,7 +113,7 @@ struct MediaStageView: View {
         case .ready: break
         }
         return switch kind {
-        case .music: "La música suena en el salón; el TV no cambia. Contrólala desde el reproductor."
+        case .music: "La pista suena en el salón; el TV no cambia. Contrólala desde el reproductor."
         case .video: "El video se muestra en el TV. Contrólalo desde el reproductor bajo la pantalla en vivo."
         default: "La imagen se muestra a pantalla completa en el TV."
         }

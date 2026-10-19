@@ -3,7 +3,7 @@
 //  iris
 //
 //  Songs (contract §10) and media (§11) from the local copy. The iPad only reads them;
-//  they are created on the web. Music and video files download when added to a service.
+//  they are created on the web. Tracks and videos download once they are in the plan or the service.
 //
 
 import Foundation
@@ -14,9 +14,21 @@ struct LiveLibraryRepository: LibraryRepository {
 
     func changes() -> AsyncStream<Void> { data.changes(of: [.songs, .media]) }
 
-    /// Ordered by title (name key).
+    /// Ordered by title (name key). Each track comes with its state on this iPad; the synced media
+    /// row wins over the copy inside the song, which can be older.
     func lyrics() async throws -> [LyricSheet] {
-        await data.store.all(.songs, as: SongDTO.self).compactMap { try? LyricSheet($0) }
+        let media = await data.store.all(.media, as: MediaAssetDTO.self)
+        let filesByID = Dictionary(media.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        var sheets: [LyricSheet] = []
+        for dto in await data.store.all(.songs, as: SongDTO.self) {
+            guard var sheet = try? LyricSheet(dto) else { continue }
+            if let audio = dto.audio {
+                let file = filesByID[audio.id] ?? audio
+                sheet.audio = MediaAsset(file, state: await cache.state(for: file))
+            }
+            sheets.append(sheet)
+        }
+        return sheets
     }
 
     func media(of kind: MediaAsset.Kind) async throws -> [MediaAsset] {
@@ -88,7 +100,7 @@ nonisolated extension MediaAsset {
         )
     }
 
-    /// "Ambiente para oración" (music description), "JPG · 1920 × 1080", "MP4 · 1920 × 1080".
+    /// "Ambiente para oración" (track description), "JPG · 1920 × 1080", "MP4 · 1920 × 1080".
     private static func subtitle(_ dto: MediaAssetDTO, kind: Kind) -> String {
         if kind == .music, let description = dto.description, !description.isEmpty { return description }
         let format = (dto.fileName as NSString).pathExtension.uppercased()

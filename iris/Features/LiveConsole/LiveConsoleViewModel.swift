@@ -180,10 +180,10 @@ final class LiveConsoleViewModel {
 
     var items: [ServiceItem] { service?.items ?? [] }
 
-    /// Whether the files behind the service's music, images and videos are on this iPad, by media id.
+    /// Whether the files behind the service's tracks, images and videos are on this iPad, by media id.
     private(set) var mediaDownloads: [String: MediaAsset.DownloadState] = [:]
 
-    /// The open media item's file: music and videos added before downloading wait for it.
+    /// The open item's file (a track, image or video): those added before downloading wait for it.
     var selectedMediaDownload: MediaAsset.DownloadState {
         guard let id = selectedItem?.mediaID else { return .ready }
         return mediaDownloads[id] ?? .ready
@@ -193,8 +193,19 @@ final class LiveConsoleViewModel {
 
     var showsBible: Bool { modules.bible }
 
-    /// Music, images and videos: library tabs, media items and the mini player.
+    /// Images and videos: the Multimedia library tab and its items. Song tracks (and the mini
+    /// player) don't depend on it (contract §6).
     var showsMultimedia: Bool { modules.multimedia }
+
+    /// The open song's track, when it has lyrics and a track (a song that is only a track is a
+    /// music item and plays from the media stage).
+    var selectedTrack: ServiceTrack? { selectedItem?.track }
+
+    /// The open song's track is loaded in the mini player and playing.
+    var isSelectedTrackPlaying: Bool {
+        guard let selectedItem, selectedItem.track != nil, let playback else { return false }
+        return playback.itemID == selectedItem.id && playback.isPlaying
+    }
 
     var selectedItem: ServiceItem? { item(id: selectedItemID) }
 
@@ -295,6 +306,8 @@ final class LiveConsoleViewModel {
             let typography = (try? await projectionSettings.settings()) ?? ProjectionSettings()
             let display = await displayOutput.connectedDisplay()
             apply(plan: plan, backgrounds: backgrounds, display: display, typography: typography)
+            // What the web adelantó may not be on this iPad yet (it was not added here): ask now.
+            requestMissingFiles(for: items)
         } catch {
             phase = .failed(String(localized: "No pudimos cargar el servicio."))
         }
@@ -309,7 +322,7 @@ final class LiveConsoleViewModel {
     ) {
         var plan = plan
         if !modules.multimedia {
-            plan.items.removeAll { [.music, .image, .video].contains($0.kind) }
+            plan.items.removeAll { [.image, .video].contains($0.kind) }
         }
         self.service = plan
         self.backgrounds = backgrounds
@@ -440,6 +453,16 @@ final class LiveConsoleViewModel {
 
     // MARK: Playback
 
+    /// Plays or pauses the open song's track in the room; the slides stay as they are.
+    func toggleSelectedTrack() {
+        guard let item = selectedItem, let track = item.track else { return }
+        if playback?.itemID == item.id {
+            togglePlayPause()
+            return
+        }
+        startPlayback(of: item, kind: .music, title: track.title, duration: track.duration, url: track.url)
+    }
+
     func togglePlayPause() {
         guard var playback else { return }
         playback.isPlaying.toggle()
@@ -526,7 +549,7 @@ final class LiveConsoleViewModel {
     func presentAddToService() {
         addSheet = AddToServiceViewModel(
             repository: libraryRepository,
-            tabs: modules.multimedia ? AddToServiceViewModel.Tab.allCases : [.lyrics]
+            tabs: modules.multimedia ? AddToServiceViewModel.Tab.allCases : [.songs]
         ) { [weak self] items in
             self?.appendToService(items)
         }
@@ -540,8 +563,12 @@ final class LiveConsoleViewModel {
         selectedItemID = items.first?.id
         addSheet = nil
         persistAdditions(items)
+        requestMissingFiles(for: items)
+    }
 
-        let missing = items.filter { $0.mediaID != nil && $0.slides.first?.content.url == nil }
+    /// Starts downloading the tracks, images and videos of these items that are not on this iPad yet.
+    private func requestMissingFiles(for items: [ServiceItem]) {
+        let missing = items.filter { $0.mediaID != nil && $0.fileURL == nil }
         guard !missing.isEmpty else { return }
         for item in missing where mediaDownloads[item.mediaID!] == nil {
             mediaDownloads[item.mediaID!] = .notDownloaded
@@ -614,7 +641,8 @@ final class LiveConsoleViewModel {
             subtitle: original.subtitle,
             slides: original.slides.map { Slide(label: $0.label, content: $0.content) },
             songID: original.songID,
-            mediaID: original.mediaID
+            mediaID: original.mediaID,
+            track: original.track
         )
         service?.items.insert(copy, at: index + 1)
         selectedItemID = copy.id
@@ -1047,8 +1075,8 @@ final class LiveConsoleViewModel {
     }
 
     private func startPlayback(of item: ServiceItem, kind: ServiceItem.Kind, title: String, duration: String, url: URL?) {
-        // Without Multimedia the mini player never appears.
-        guard modules.multimedia else { return }
+        // Without Multimedia there are no videos; song tracks always play (contract §6).
+        guard modules.multimedia || kind == .music else { return }
         // A library file still downloading waits for it (sample data has no file and plays as is).
         if let id = item.mediaID, (mediaDownloads[id] ?? .ready) != .ready { return }
         if playback?.itemID == item.id {
@@ -1061,7 +1089,8 @@ final class LiveConsoleViewModel {
         playback = Playback(itemID: item.id, kind: kind, title: title, duration: Self.seconds(from: duration))
     }
 
-    /// Points the service's media items at their cached files and records how each download goes.
+    /// Points the service's media items and song tracks at their cached files and records how each
+    /// download goes.
     private func refreshMediaFiles() async {
         let ids = Set(items.compactMap(\.mediaID))
         guard !ids.isEmpty else { return }
@@ -1081,8 +1110,16 @@ final class LiveConsoleViewModel {
             // Deleted on the web: it can no longer play.
             mediaDownloads[id] = asset?.downloadState ?? .failed
             let url = asset?.localURL
-            for slideIndex in plan.items[index].slides.indices where plan.items[index].slides[slideIndex].content.url != url {
-                plan.items[index].slides[slideIndex].content = plan.items[index].slides[slideIndex].content.replacingURL(url)
+            for slideIndex in plan.items[index].slides.indices {
+                let content = plan.items[index].slides[slideIndex].content
+                // A song's lyrics have no file: only its track follows the download.
+                if case .text = content { continue }
+                guard content.url != url else { continue }
+                plan.items[index].slides[slideIndex].content = content.replacingURL(url)
+                changedItems.insert(plan.items[index].id)
+            }
+            if plan.items[index].track != nil, plan.items[index].track?.url != url {
+                plan.items[index].track?.url = url
                 changedItems.insert(plan.items[index].id)
             }
         }

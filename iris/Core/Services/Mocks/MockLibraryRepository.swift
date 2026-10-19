@@ -30,10 +30,13 @@ struct MockLibraryRepository: LibraryRepository {
         LyricSheet(title: "Cariñoso Salvador", author: "Charles Wesley", sections: [
             Slide(label: "Estrofa 1", content: .text("Cariñoso Salvador,\nhuyo de la tempestad\na tu seno protector,\nfiándome de tu bondad.", footnote: nil))
         ]),
+        // Lyrics and track together.
         LyricSheet(title: "Sublime gracia", author: "John Newton", sections: [
             Slide(label: "Estrofa 1", content: .text("Sublime gracia del Señor\nque a un pecador salvó;\nfui ciego mas hoy veo yo,\nperdido y Él me halló.", footnote: nil)),
             Slide(label: "Estrofa 2", content: .text("Su gracia me enseñó a temer,\nmis dudas ahuyentó;\n¡oh cuán precioso fue a mi ser\ncuando Él me transformó!", footnote: nil))
-        ]),
+        ], audio: sampleTrack("m5")),
+        // Only a track.
+        LyricSheet(title: "Piano de fondo", author: "Ambiente para oración", sections: [], audio: sampleTrack("m1")),
         LyricSheet(title: "Santo, santo, santo", author: "Reginald Heber", sections: [
             Slide(label: "Estrofa 1", content: .text("¡Santo, santo, santo! Señor omnipotente,\nsiempre el labio mío loores te dará;\n¡Santo, santo, santo! te adoro reverente,\nDios en tres personas, bendita Trinidad.", footnote: nil))
         ]),
@@ -42,8 +45,12 @@ struct MockLibraryRepository: LibraryRepository {
         ])
     ]
 
+    private static func sampleTrack(_ id: String) -> MediaAsset? {
+        sampleMedia.first { $0.id == id }
+    }
+
     static let sampleMedia: [MediaAsset] = [
-        // Music
+        // Song tracks
         MediaAsset(id: "m1", kind: .music, title: "Piano de fondo", subtitle: "Ambiente para oración", duration: "6:12", artwork: [0x0F2417, 0x2F5233]),
         MediaAsset(id: "m2", kind: .music, title: "Preludio en Re", subtitle: "Órgano", duration: "3:40", artwork: [0x3A1E08, 0x8C3A1E]),
         MediaAsset(id: "m3", kind: .music, title: "Ofrenda · Guitarra acústica", subtitle: "Banda de alabanza", duration: "4:05", artwork: [0x06283D, 0x0E5E6F]),

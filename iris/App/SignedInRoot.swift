@@ -110,7 +110,7 @@ struct SignedInRoot: View {
                     AddToServiceView(
                         viewModel: AddToServiceViewModel(
                             repository: dependencies.libraryRepository,
-                            tabs: homeViewModel.modules.multimedia ? AddToServiceViewModel.Tab.allCases : [.lyrics],
+                            tabs: homeViewModel.modules.multimedia ? AddToServiceViewModel.Tab.allCases : [.songs],
                             mode: .browse
                         )
                     )

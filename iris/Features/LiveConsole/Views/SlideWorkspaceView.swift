@@ -70,6 +70,13 @@ struct SlideWorkspaceView: View {
 
     private var toolbar: some View {
         HStack(spacing: IrisSpacing.xs) {
+            if let track = viewModel.selectedTrack {
+                trackButton(track)
+                Divider()
+                    .frame(height: 28)
+                    .padding(.horizontal, IrisSpacing.xxs)
+            }
+
             if viewModel.isShowingScripture {
                 Button {
                     withAnimation(IrisMotion.smooth) { viewModel.previous() }
@@ -136,15 +143,47 @@ struct SlideWorkspaceView: View {
             .popover(isPresented: $viewModel.isPickingCountdown) {
                 CountdownPickerView(viewModel: viewModel)
             }
+        }
+    }
 
-            if !viewModel.isShowingScripture {
-                Button {} label: {
-                    Label("Editar", systemImage: "pencil")
+    /// The open song's track: ready to play in the room while the slides go to the TV. Waits for
+    /// the file when it is still downloading.
+    private func trackButton(_ track: ServiceTrack) -> some View {
+        let download = viewModel.selectedMediaDownload
+        let isPlaying = viewModel.isSelectedTrackPlaying
+        return Button {
+            if download == .failed {
+                viewModel.retrySelectedMediaDownload()
+            } else {
+                viewModel.toggleSelectedTrack()
+            }
+        } label: {
+            HStack(spacing: IrisSpacing.xs) {
+                switch download {
+                case .ready:
+                    Image(systemName: isPlaying ? "pause.fill" : "play.fill")
+                case let .downloading(progress):
+                    ProgressView(value: progress)
+                        .progressViewStyle(.circular)
+                        .controlSize(.small)
+                case .notDownloaded:
+                    Image(systemName: "icloud.and.arrow.down")
+                case .failed:
+                    Image(systemName: "exclamationmark.icloud")
                 }
-                .buttonStyle(.irisPill)
-                .padding(.leading, IrisSpacing.xxs)
+                Text(download == .failed ? "Reintentar pista" : isPlaying ? "Pausar pista" : "Pista")
+                if !track.duration.isEmpty {
+                    Text(track.duration)
+                        .monospacedDigit()
+                        .foregroundStyle(IrisColor.textSecondary)
+                }
             }
         }
+        .buttonStyle(.irisPill)
+        .tint(ServiceItem.Kind.music.tint)
+        .disabled(download != .ready && download != .failed)
+        .accessibilityLabel(Text(download == .failed ? "Reintentar la descarga de la pista" : isPlaying ? "Pausar la pista" : "Reproducir la pista"))
+        .accessibilityHint(download == .ready ? Text("Suena en el salón; el TV no cambia.") : Text(""))
     }
 
     // MARK: Grid

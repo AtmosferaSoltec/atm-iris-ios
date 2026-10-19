@@ -6,8 +6,8 @@
 import AVFoundation
 import Foundation
 
-/// What any client (web, iPad, Windows) adelantó for the next service: songs and media, in order,
-/// with no history by service (contract §15). A console that opens with nothing adelantado just
+/// What any client (web, iPad, Windows) adelantó for the next service: songs (with their tracks)
+/// and images or videos, in order, with no history by service (contract §15). A console that opens with nothing adelantado just
 /// gets an empty list — the product rule that a service always starts blank still holds; this is
 /// what the web (or another console) chose to have ready, not a saved history.
 protocol ServicePlanRepository {

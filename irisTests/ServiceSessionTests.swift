@@ -342,6 +342,92 @@ struct CloudMusicTests {
         #expect(viewModel.playback?.title == "Preludio")
     }
 
+    /// The web adelantó a song with its track; nobody added it on this iPad.
+    private struct WebPlan: ServicePlanRepository {
+        let item: ServiceItem
+        func currentService() async throws -> ServicePlan {
+            ServicePlan(id: UUID(), title: "Servicio", date: .now, items: [item])
+        }
+    }
+
+    private func console(library: DownloadingLibrary, plan: any ServicePlanRepository = EmptyServicePlanRepository(), playback: MockMediaPlaybackService = MockMediaPlaybackService(), modules: ChurchModules = ChurchModules()) -> LiveConsoleViewModel {
+        let store = InMemoryChurchStore()
+        return LiveConsoleViewModel(
+            session: .preview,
+            serviceType: store.serviceTypes[0],
+            modules: modules,
+            people: store.people,
+            servicePlanRepository: plan,
+            projectionSettings: MockProjectionSettingsRepository(store: store, latency: .zero),
+            backgroundRepository: MockBackgroundRepository(),
+            bibleRepository: MockBibleRepository(),
+            libraryRepository: library,
+            mediaPlayback: playback,
+            displayOutput: MockDisplayOutputService(),
+            serviceTypes: MockServiceTypeRepository(store: store, latency: .zero),
+            peopleRepository: MockPeopleRepository(store: store, latency: .zero),
+            timeRecords: MockTimeRecordRepository(store: store, latency: .zero)
+        )
+    }
+
+    private func songWithTrack(_ library: DownloadingLibrary) -> ServiceItem {
+        let song = LyricSheet(
+            title: "Hoy te salvo",
+            author: "Pedro Márquez",
+            sections: [Slide(content: .text("Hoy te salvo", footnote: nil))],
+            audio: library.track
+        )
+        return ServiceItem(lyric: song)
+    }
+
+    @Test func whatTheWebAdelantoDownloadsWhenTheConsoleOpens() async throws {
+        let library = DownloadingLibrary()
+        let viewModel = console(library: library, plan: WebPlan(item: songWithTrack(library)))
+        await viewModel.load()
+        try await waitUntil { library.requested == ["t1"] }
+    }
+
+    @Test func aSongsTrackWaitsForItsFileAndPlaysWithoutTouchingTheTV() async throws {
+        let library = DownloadingLibrary()
+        let viewModel = console(library: library)
+        await viewModel.load()
+        let observing = Task { await viewModel.observeLibrary() }
+        defer { observing.cancel() }
+
+        viewModel.appendToService([songWithTrack(library)])
+        #expect(viewModel.selectedTrack != nil)
+        #expect(viewModel.selectedMediaDownload == .notDownloaded)
+        viewModel.toggleSelectedTrack()
+        #expect(viewModel.playback == nil)
+
+        let file = URL.temporaryDirectory.appending(path: "hoy-te-salvo.mp3")
+        library.finish(at: file)
+        try await waitUntil { viewModel.selectedTrack?.url == file }
+        // Its lyrics stay text: only the track follows the file.
+        if case .text = viewModel.selectedItem?.slides.first?.content {} else { Issue.record("La letra dejó de ser texto") }
+
+        let liveBefore = viewModel.liveSlideID
+        viewModel.toggleSelectedTrack()
+        #expect(viewModel.playback?.title == "Hoy te salvo")
+        #expect(viewModel.isSelectedTrackPlaying)
+        #expect(viewModel.liveSlideID == liveBefore)
+        viewModel.toggleSelectedTrack()
+        #expect(!viewModel.isSelectedTrackPlaying)
+    }
+
+    @Test func tracksPlayEvenWithMultimediaOff() async throws {
+        let library = DownloadingLibrary()
+        library.track.downloadState = .ready
+        library.track.localURL = URL.temporaryDirectory.appending(path: "pista.mp3")
+        var modules = ChurchModules()
+        modules.multimedia = false
+        let viewModel = console(library: library, plan: WebPlan(item: songWithTrack(library)), modules: modules)
+        await viewModel.load()
+        viewModel.selectItem(try #require(viewModel.items.first).id)
+        viewModel.toggleSelectedTrack()
+        #expect(viewModel.playback != nil)
+    }
+
     private func waitUntil(_ condition: () -> Bool) async throws {
         for _ in 0..<200 where !condition() {
             try await Task.sleep(for: .milliseconds(10))

@@ -127,7 +127,7 @@ extension HomeViewModel {
             serviceTypes: store.serviceTypes,
             people: store.people,
             recordCount: store.records.count,
-            library: .init(lyrics: 6, music: 5, media: 11),
+            library: .init(lyrics: 6, tracks: 5, media: 11),
             display: ExternalDisplay(name: "Sala principal", resolution: "1920 × 1080")
         )
         return viewModel

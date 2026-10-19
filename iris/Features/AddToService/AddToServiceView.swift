@@ -5,7 +5,7 @@
 
 import SwiftUI
 
-/// Library browser with three tabs: Letras · Música · Multimedia.
+/// Library browser with two tabs: Canciones (lyrics and their tracks) · Multimedia.
 /// As a picker, items can be chosen across tabs and are appended to the service in pick order.
 /// In browse mode (Home › Biblioteca) it only shows the library.
 struct AddToServiceView: View {
@@ -20,7 +20,7 @@ struct AddToServiceView: View {
         VStack(alignment: .leading, spacing: IrisSpacing.lg) {
             header
 
-            if !viewModel.isLyricsOnly {
+            if !viewModel.isSongsOnly {
                 IrisSegmentedControl(
                     options: viewModel.tabs,
                     selection: $viewModel.tab,
@@ -38,8 +38,8 @@ struct AddToServiceView: View {
                 field: .search
             )
 
-            if viewModel.tab == .music {
-                musicDownloadHint
+            if viewModel.tab == .songs {
+                trackDownloadHint
             }
 
             content
@@ -68,10 +68,10 @@ struct AddToServiceView: View {
                         .font(IrisFont.title)
                         .foregroundStyle(IrisColor.textPrimary)
                     Group {
-                        if viewModel.isLyricsOnly {
-                            Text("Elige letras de tu biblioteca.")
+                        if viewModel.isSongsOnly {
+                            Text("Elige canciones de tu biblioteca.")
                         } else {
-                            Text("Elige letras, música o multimedia para tu servicio.")
+                            Text("Elige canciones o multimedia para tu servicio.")
                         }
                     }
                     .font(IrisFont.callout)
@@ -80,7 +80,7 @@ struct AddToServiceView: View {
                     Text("Tu biblioteca")
                         .font(IrisFont.title)
                         .foregroundStyle(IrisColor.textPrimary)
-                    Text("Letras, música y multimedia que subiste desde la web.")
+                    Text("Canciones y multimedia que subiste desde la web.")
                         .font(IrisFont.callout)
                         .foregroundStyle(IrisColor.textSecondary)
                 }
@@ -99,11 +99,11 @@ struct AddToServiceView: View {
     }
 
     /// Where the tracks come from and when they reach this iPad.
-    private var musicDownloadHint: some View {
+    private var trackDownloadHint: some View {
         HStack(spacing: IrisSpacing.md) {
             Image(systemName: "icloud.and.arrow.down")
                 .foregroundStyle(ServiceItem.Kind.music.tint)
-            Text("Se suben desde la web, en Música. Al agregarlas al servicio se descargan y quedan en este iPad.")
+            Text("La letra y la pista llegan juntas. Las pistas se descargan al agregar la canción al servicio y quedan en este iPad.")
                 .font(IrisFont.callout)
                 .foregroundStyle(IrisColor.textSecondary)
             Spacer(minLength: 0)
@@ -154,18 +154,11 @@ struct AddToServiceView: View {
     @ViewBuilder
     private var emptyLibrary: some View {
         switch viewModel.tab {
-        case .lyrics:
+        case .songs:
             ContentUnavailableView {
                 Label("Aún no hay canciones", systemImage: ServiceItem.Kind.song.systemImage)
             } description: {
-                Text("Agrégalas desde la web de Iris.")
-            }
-            .foregroundStyle(IrisColor.textSecondary)
-        case .music:
-            ContentUnavailableView {
-                Label("Aún no hay música", systemImage: ServiceItem.Kind.music.systemImage)
-            } description: {
-                Text("Sube tus pistas (MP3, M4A, WAV…) desde la web de Iris, en Música.")
+                Text("Agrega la letra y la pista desde la web de Iris, en Canciones.")
             }
             .foregroundStyle(IrisColor.textSecondary)
         case .media:
@@ -181,36 +174,22 @@ struct AddToServiceView: View {
     @ViewBuilder
     private var tabContent: some View {
         switch viewModel.tab {
-        case .lyrics:
+        case .songs:
             LazyVStack(spacing: IrisSpacing.xxs) {
                 ForEach(viewModel.filteredLyrics) { sheet in
+                    let kind: ServiceItem.Kind = sheet.isTrackOnly ? .music : .song
                     LibraryRow(
-                        leading: .icon(ServiceItem.Kind.song.systemImage, tint: ServiceItem.Kind.song.tint),
+                        leading: .icon(kind.systemImage, tint: kind.tint),
                         title: sheet.title,
-                        subtitle: sheet.author,
-                        trailing: nil,
+                        subtitle: Self.songSubtitle(sheet),
+                        trailing: sheet.audio?.duration,
+                        trailingIcon: sheet.audio == nil ? nil : ServiceItem.Kind.music.systemImage,
+                        downloadState: sheet.audio?.downloadState ?? .ready,
                         showsSelection: viewModel.isPicker,
+                        preview: sheet.audio?.localURL.map { PreviewControl(player: viewModel.preview, url: $0) },
                         isSelected: viewModel.isSelected(.lyric(sheet.id))
                     ) {
                         viewModel.toggle(.lyric(sheet.id))
-                    }
-                }
-            }
-
-        case .music:
-            LazyVStack(spacing: IrisSpacing.xxs) {
-                ForEach(viewModel.filteredMusic) { asset in
-                    LibraryRow(
-                        leading: .icon(ServiceItem.Kind.music.systemImage, tint: ServiceItem.Kind.music.tint),
-                        title: asset.title,
-                        subtitle: asset.subtitle,
-                        trailing: asset.duration,
-                        downloadState: asset.downloadState,
-                        showsSelection: viewModel.isPicker,
-                        preview: asset.localURL.map { PreviewControl(player: viewModel.preview, url: $0) },
-                        isSelected: viewModel.isSelected(.media(asset.id))
-                    ) {
-                        viewModel.toggle(.media(asset.id))
                     }
                 }
             }
@@ -250,6 +229,8 @@ struct LibraryRow: View {
     let title: String
     let subtitle: String
     let trailing: String?
+    /// Next to `trailing`: a song's track shows the note before its duration.
+    var trailingIcon: String?
     var downloadState: MediaAsset.DownloadState = .ready
     /// Hidden when only browsing.
     var showsSelection = true
@@ -282,10 +263,20 @@ struct LibraryRow: View {
 
                 if downloadState != .ready {
                     DownloadBadge(state: downloadState)
-                } else if let trailing {
-                    Text(trailing)
-                        .font(.system(.callout, design: .monospaced, weight: .medium))
-                        .foregroundStyle(IrisColor.textSecondary)
+                } else if trailing != nil || trailingIcon != nil {
+                    HStack(spacing: IrisSpacing.xs) {
+                        if let trailingIcon {
+                            Image(systemName: trailingIcon)
+                                .font(.system(.footnote, weight: .semibold))
+                                .foregroundStyle(ServiceItem.Kind.music.tint)
+                                .accessibilityLabel(Text("Con pista"))
+                        }
+                        if let trailing {
+                            Text(trailing)
+                                .font(.system(.callout, design: .monospaced, weight: .medium))
+                                .foregroundStyle(IrisColor.textSecondary)
+                        }
+                    }
                 }
 
                 if showsSelection {
@@ -524,15 +515,21 @@ struct LibraryMediaTile: View {
     }
 }
 
+extension AddToServiceView {
+    /// "Pedro Márquez", "Solo pista" or "Pedro Márquez · Solo pista".
+    static func songSubtitle(_ sheet: LyricSheet) -> String {
+        guard sheet.isTrackOnly else { return sheet.author }
+        return [sheet.author, String(localized: "Solo pista")].filter { !$0.isEmpty }.joined(separator: " · ")
+    }
+}
+
 extension AddToServiceViewModel {
     /// Loaded view model for previews, optionally on a given tab.
-    static func preview(tab: Tab = .lyrics, tabs: [Tab] = Tab.allCases, mode: Mode = .picker) -> AddToServiceViewModel {
+    static func preview(tab: Tab = .songs, tabs: [Tab] = Tab.allCases, mode: Mode = .picker) -> AddToServiceViewModel {
         let viewModel = AddToServiceViewModel(repository: MockLibraryRepository(latency: .zero), tabs: tabs, mode: mode)
-        let sample = MockLibraryRepository.sampleMedia
         viewModel.apply(
             lyrics: MockLibraryRepository.sampleLyrics,
-            music: sample.filter { $0.kind == .music },
-            media: sample.filter { $0.kind != .music }
+            media: MockLibraryRepository.sampleMedia.filter { $0.kind != .music }
         )
         viewModel.tab = tab
         if mode == .picker {
@@ -543,7 +540,7 @@ extension AddToServiceViewModel {
     }
 }
 
-#Preview("Letras") {
+#Preview("Canciones") {
     AddToServiceView(viewModel: .preview())
         .frame(width: 900, height: 820)
         .background(IrisColor.canvasElevated)
@@ -551,7 +548,7 @@ extension AddToServiceViewModel {
 }
 
 #Preview("Sin multimedia") {
-    AddToServiceView(viewModel: .preview(tabs: [.lyrics]))
+    AddToServiceView(viewModel: .preview(tabs: [.songs]))
         .frame(width: 900, height: 820)
         .background(IrisColor.canvasElevated)
         .preferredColorScheme(.dark)

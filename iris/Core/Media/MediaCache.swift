@@ -6,9 +6,10 @@
 import Foundation
 import os
 
-/// The church's images, videos and music on this iPad (contract §11).
-/// Images and backgrounds download as soon as they sync; music and videos only once they are
-/// requested (added to a service), and then stay here until they are deleted or replaced on the web.
+/// The church's images, videos and song tracks on this iPad (contract §11).
+/// Images and backgrounds download as soon as they sync; tracks and videos only once they are
+/// requested (in the plan, or added to a service), and then stay here until they are deleted or
+/// replaced on the web.
 /// Files live in `Application Support/Media/<churchID>/<mediaID>-<updatedAt>.<ext>`, outside iCloud backups.
 actor MediaCache {
     nonisolated enum State: Hashable, Sendable {
@@ -31,7 +32,7 @@ actor MediaCache {
     private var runsAgain: [MediaAssetDTO]?
     /// The latest synced list, so a request can start without waiting for the next sync.
     private var known: [MediaAssetDTO] = []
-    /// Music and videos asked for on this iPad (this session, or already downloaded before).
+    /// Tracks and videos asked for on this iPad (this session, or already downloaded before).
     private var wanted: Set<String> = []
     /// Told when states change (throttled), so open screens refresh.
     private var onChange: @Sendable () -> Void = {}
@@ -80,7 +81,7 @@ actor MediaCache {
         return states[asset.id] ?? .notDownloaded
     }
 
-    /// Music and videos to have on this iPad (added to a service). Files already here are kept as they are.
+    /// Tracks and videos to have on this iPad (added to a service). Files already here are kept as they are.
     func request(_ ids: [String]) async {
         guard !ids.isEmpty else { return }
         wanted.formUnion(ids)
@@ -91,11 +92,16 @@ actor MediaCache {
     }
 
     /// After a sync: removes files of deleted or replaced media and downloads what is missing:
-    /// every image and background, and the music and videos that were requested.
-    /// Images first, then music, then videos; at most two at a time.
-    func ensureDownloaded(_ assets: [MediaAssetDTO]) async {
+    /// every image and background, and the tracks and videos that were requested — `requesting`
+    /// adds those in the plan, so what the web adelantó is on this iPad before the service starts.
+    /// Images first, then tracks, then videos; at most two at a time.
+    func ensureDownloaded(_ assets: [MediaAssetDTO], requesting ids: [String] = []) async {
         guard churchID != nil else { return }
         known = assets
+        if !ids.isEmpty {
+            wanted.formUnion(ids)
+            for id in ids where states[id] == .failed { states[id] = nil }
+        }
         if isRunning {
             runsAgain = assets
             return
@@ -176,7 +182,7 @@ actor MediaCache {
         onChange()
     }
 
-    /// Images and backgrounds always; music and videos only when requested.
+    /// Images and backgrounds always; tracks and videos only when requested.
     private func downloadsNow(_ asset: MediaAssetDTO) -> Bool {
         asset.kind == .image || asset.isBackground || wanted.contains(asset.id)
     }

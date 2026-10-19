@@ -19,9 +19,9 @@ struct ServiceOrderView: View {
                     Label("Servicio vacío", systemImage: "list.bullet.rectangle")
                 } description: {
                     if viewModel.showsMultimedia {
-                        Text("Toca Agregar para sumar letras, música, imágenes o videos.")
+                        Text("Toca Agregar para sumar canciones, imágenes o videos.")
                     } else {
-                        Text("Toca Agregar para sumar letras.")
+                        Text("Toca Agregar para sumar canciones.")
                     }
                 }
                 .foregroundStyle(IrisColor.textSecondary)

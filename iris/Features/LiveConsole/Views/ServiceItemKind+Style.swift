@@ -9,10 +9,10 @@ import SwiftUI
 extension ServiceItem.Kind {
     var displayName: LocalizedStringKey {
         switch self {
-        case .song: "Letra"
+        case .song: "Canción"
         case .scripture: "Pasaje"
         case .announcement: "Anuncio"
-        case .music: "Música"
+        case .music: "Pista"
         case .image: "Imagen"
         case .video: "Video"
         }
