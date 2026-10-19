@@ -83,7 +83,7 @@ final class PeopleViewModel {
     func apply(people: [Person], records: [ServiceRecord]) {
         self.people = Self.sorted(people)
         var counts: [Person.ID: Int] = [:]
-        for block in records.flatMap(\.blocks) where block.status != .skipped {
+        for block in records.flatMap(\.blocks) where block.hasTime {
             guard let id = block.personID else { continue }
             counts[id, default: 0] += 1
         }

@@ -24,11 +24,11 @@ struct BlockTimerBar: View {
         }
         .alert("Hoy hiciste cambios en los bloques", isPresented: $viewModel.isAskingTemplateUpdate) {
             Button("Solo hoy") {
-                Task { await viewModel.saveRecord(updatingTemplate: false) }
+                Task { await viewModel.answerTemplateUpdate(updatingTemplate: false) }
             }
             if viewModel.canSaveTemplate {
                 Button("Guardar en la plantilla") {
-                    Task { await viewModel.saveRecord(updatingTemplate: true) }
+                    Task { await viewModel.answerTemplateUpdate(updatingTemplate: true) }
                 }
             }
         } message: {

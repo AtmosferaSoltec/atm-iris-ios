@@ -73,6 +73,30 @@ nonisolated struct BlockTimer: Equatable, Sendable {
         }
     }
 
+    /// Picks up a service saved while it ran (see `record`): same blocks, leaders and clock, so the current block
+    /// keeps counting from when it really started. `nil` when the record has no running block to continue.
+    init?(resuming record: ServiceRecord, template: [BlockTemplate]) {
+        guard record.isInProgress,
+              let current = record.blocks.firstIndex(where: { $0.status == .running }),
+              record.blocks[current].startedAt != nil else { return nil }
+        self.template = template
+        blocks = record.blocks.map { block in
+            let templateID = template.first { Self.recordBlockID(of: $0.id, in: record.id) == block.id }?.id
+            return Block(
+                id: templateID ?? Self.recordBlockID(of: block.id, in: record.id),
+                name: block.name,
+                plannedSeconds: block.plannedSeconds,
+                personID: block.personID,
+                startedAt: block.startedAt,
+                endedAt: block.status == .running ? nil : block.endedAt,
+                isSkipped: block.status == .skipped,
+                isAddedToday: templateID == nil
+            )
+        }
+        currentIndex = current
+        phase = .running
+    }
+
     // MARK: Reading
 
     var currentBlock: Block? { currentIndex.map { blocks[$0] } }
@@ -196,22 +220,52 @@ nonisolated struct BlockTimer: Equatable, Sendable {
 
     // MARK: Results
 
-    /// Skipped and never-reached blocks are saved with status `.skipped` and no time.
-    /// `serviceTypeName` is kept with the record so it stays readable if the type is deleted.
-    func record(serviceTypeID: ServiceType.ID, serviceTypeName: String? = nil, date: Date, peopleNames: [Person.ID: String]) -> ServiceRecord {
-        let records = blocks.map { block in
-            let ran = block.startedAt != nil && !block.isSkipped
-            let personID = ran ? block.personID : nil
+    /// While running, the record is `inProgress` and says where the service is, so it can be resumed: the current
+    /// block is `running` (timed up to `now`) and the blocks still to come keep their leader as `pending` or
+    /// `skipped`. Once finished, skipped and never-reached blocks are saved with status `.skipped`, no time and
+    /// no leader. `serviceTypeName` is kept with the record so it stays readable if the type is deleted.
+    func record(
+        id: ServiceRecord.ID = UUID(),
+        serviceTypeID: ServiceType.ID,
+        serviceTypeName: String? = nil,
+        date: Date,
+        peopleNames: [Person.ID: String],
+        now: Date? = nil
+    ) -> ServiceRecord {
+        let isRunning = phase == .running
+        let records = blocks.indices.map { index in
+            let block = blocks[index]
+            let status: BlockRecord.Status = if block.isSkipped {
+                .skipped
+            } else if index == currentIndex {
+                .running
+            } else if block.startedAt != nil {
+                .completed
+            } else {
+                isRunning ? .pending : .skipped
+            }
+            let ran = status == .completed || status == .running
+            let personID = ran || isRunning ? block.personID : nil
             return BlockRecord(
+                id: Self.recordBlockID(of: block.id, in: id),
                 name: block.name,
                 plannedSeconds: block.plannedSeconds,
-                actualSeconds: ran ? elapsed(of: block.id, now: block.endedAt ?? date).rounded(.down) : 0,
+                actualSeconds: ran ? elapsed(of: block.id, now: block.endedAt ?? now ?? date).rounded(.down) : 0,
                 personID: personID,
                 personName: personID.flatMap { peopleNames[$0] },
-                status: ran ? .completed : .skipped
+                status: status,
+                startedAt: ran ? block.startedAt : nil,
+                endedAt: status == .completed ? block.endedAt : nil
             )
         }
-        return ServiceRecord(date: date, serviceTypeID: serviceTypeID, serviceTypeName: serviceTypeName, blocks: records)
+        return ServiceRecord(
+            id: id,
+            status: isRunning ? .inProgress : .finished,
+            date: date,
+            serviceTypeID: serviceTypeID,
+            serviceTypeName: serviceTypeName,
+            blocks: records
+        )
     }
 
     /// Today's order, names and minutes, without the skipped blocks. Template leaders are kept;
@@ -226,6 +280,22 @@ nonisolated struct BlockTimer: Equatable, Sendable {
             }
             return BlockTemplate(id: block.id, name: block.name, plannedMinutes: block.plannedMinutes, defaultPersonID: block.personID)
         }
+    }
+
+    /// A block's id in the saved record. The template's ids repeat every service, so it mixes in the record's:
+    /// unique per record, the same on every save of one service, and applying it twice gives the block back.
+    static func recordBlockID(of blockID: Block.ID, in recordID: ServiceRecord.ID) -> UUID {
+        var value = blockID.uuid
+        let key = recordID.uuid
+        withUnsafeMutableBytes(of: &value) { bytes in
+            withUnsafeBytes(of: key) { keyBytes in
+                for index in bytes.indices { bytes[index] ^= keyBytes[index] }
+            }
+            // Still a version 4 UUID, as the API requires.
+            bytes[6] = (bytes[6] & 0x0F) | 0x40
+            bytes[8] = (bytes[8] & 0x3F) | 0x80
+        }
+        return UUID(uuid: value)
     }
 
     // MARK: Private

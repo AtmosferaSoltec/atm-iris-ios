@@ -135,6 +135,7 @@ struct TimesView: View {
                 date: viewModel.shortDate(record.date),
                 duration: IrisDurationFormat.clock(record.actualSeconds),
                 overtime: record.overtimeSeconds,
+                isInProgress: record.isInProgress,
                 isSelected: record.id == viewModel.selectedRecordID
             )
         }
@@ -163,6 +164,7 @@ private struct TimeRecordRow: View {
     let date: String
     let duration: String
     let overtime: TimeInterval
+    let isInProgress: Bool
     let isSelected: Bool
 
     private var shape: RoundedRectangle {
@@ -209,7 +211,9 @@ private struct TimeRecordRow: View {
 
     @ViewBuilder
     private var overtimeChip: some View {
-        if overtime > 0 {
+        if isInProgress {
+            IrisChip("En curso", tint: IrisColor.live)
+        } else if overtime > 0 {
             IrisChip("\(IrisDurationFormat.overtime(overtime))", tint: IrisColor.danger)
         } else {
             IrisChip("A tiempo", tint: IrisColor.success)

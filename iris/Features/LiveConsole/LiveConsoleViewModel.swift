@@ -92,8 +92,13 @@ final class LiveConsoleViewModel {
 
     // MARK: Block timer state
 
-    /// Only when the church uses time control and the service type has blocks.
-    private(set) var blockTimer: BlockTimer?
+    /// Only when the church uses time control and the service type has blocks. Every change while it runs is
+    /// saved as the record in progress, so closing the app or leaving the console loses nothing (contract §14).
+    private(set) var blockTimer: BlockTimer? {
+        didSet {
+            if blockTimer?.phase == .running, blockTimer != oldValue { saveProgress() }
+        }
+    }
     /// Ticks every second while a block runs.
     private(set) var now: Date
     /// Leaders offered in the pickers; grows when someone is added from the console.
@@ -104,15 +109,25 @@ final class LiveConsoleViewModel {
     var isConfirmingFinish = false
     var isAskingTemplateUpdate = false
     var isConfirmingExit = false
-    /// Built when the service ends; saved right away or after the template question.
+    /// A service of this type left running (the app closed, or it was started on another console).
+    private(set) var resumableRecord: ServiceRecord?
+    var isOfferingResume = false
+    /// Built and saved as soon as the service ends, before the template question.
     private(set) var finishedRecord: ServiceRecord?
     private(set) var isRecordSaved = false
     private(set) var isSavingRecord = false
     private(set) var recordError: String?
     /// Saved on the iPad but not yet on the API (no connection): "Se enviará cuando haya conexión".
     private(set) var isRecordPendingUpload = false
-    private var savesTemplate = false
+    /// The template question is still open: leaving waits for the answer.
+    private var isTemplateAnswerPending = false
+    /// Kept when saving the template failed, for "Reintentar".
+    private var templateToSave: ServiceType?
     private var pendingExit: (() -> Void)?
+    /// Same id from "Comenzar" to "Terminar": every save replaces the same record.
+    private var recordID = UUID()
+    /// Saves of the running service, one after another so the last change always lands last.
+    @ObservationIgnored private var progressSave: Task<Void, Never>?
 
     let context: SessionContext
     var session: UserSession { context.session }
@@ -310,7 +325,9 @@ final class LiveConsoleViewModel {
             requestMissingFiles(for: items)
         } catch {
             phase = .failed(String(localized: "No pudimos cargar el servicio."))
+            return
         }
+        await findResumableService()
     }
 
     /// Installs loaded data. Also used by previews to start in a loaded state.
@@ -921,7 +938,8 @@ final class LiveConsoleViewModel {
         isConfirmingFinish = true
     }
 
-    /// Ends the service. When today's blocks differ from the template, asks first and saves after the answer.
+    /// Ends the service and saves the times right away; when today's blocks differ from the template, then asks
+    /// whether to keep the changes. Closing the app during the question loses nothing.
     func finishService() async {
         guard var timer = blockTimer, timer.phase == .running else { return }
         now = clock()
@@ -929,28 +947,23 @@ final class LiveConsoleViewModel {
         blockTimer = timer
         finishedRecord = makeRecord(from: timer)
         if timer.hasTemplateChanges {
+            isTemplateAnswerPending = true
             isAskingTemplateUpdate = true
-        } else {
-            await saveRecord(updatingTemplate: false)
         }
+        await saveRecord()
     }
 
     /// "Guardar en la plantilla" needs `serviceTypes.manage`; without it the question only offers "Solo hoy".
     var canSaveTemplate: Bool { context.can(.serviceTypesManage) }
 
-    /// "Solo hoy" or "Guardar en la plantilla". Only times are saved, never the content used.
-    func saveRecord(updatingTemplate requested: Bool) async {
-        let updatingTemplate = requested && canSaveTemplate
-        guard let blockTimer, let record = finishedRecord, let serviceType, !isSavingRecord, !isRecordSaved else { return }
-        savesTemplate = updatingTemplate
+    /// Saves the finished record over the one in progress. Only times are saved, never the content used.
+    func saveRecord() async {
+        guard let record = finishedRecord, !isSavingRecord, !isRecordSaved else { return }
         isSavingRecord = true
         recordError = nil
+        // A save of the running service still on its way must not land after this one.
+        await flushProgress()
         do {
-            if updatingTemplate {
-                var updated = serviceType
-                updated.blocks = blockTimer.updatedTemplate(serviceType.blocks)
-                try await serviceTypeRepository.save(updated)
-            }
             try await timeRecords.save(record)
             isRecordSaved = true
             Task { await watchRecordUpload(record.id) }
@@ -958,9 +971,28 @@ final class LiveConsoleViewModel {
             recordError = String(localized: "No pudimos guardar los tiempos. Inténtalo de nuevo.")
         }
         isSavingRecord = false
-        if isRecordSaved, let exit = pendingExit {
-            pendingExit = nil
-            exit()
+        exitIfDone()
+    }
+
+    /// "Solo hoy" or "Guardar en la plantilla". The times are already saved; only the template is left.
+    func answerTemplateUpdate(updatingTemplate requested: Bool) async {
+        if requested, canSaveTemplate, let serviceType, let blockTimer {
+            var updated = serviceType
+            updated.blocks = blockTimer.updatedTemplate(serviceType.blocks)
+            await saveTemplate(updated)
+        }
+        isTemplateAnswerPending = false
+        exitIfDone()
+    }
+
+    private func saveTemplate(_ updated: ServiceType) async {
+        recordError = nil
+        do {
+            try await serviceTypeRepository.save(updated)
+            templateToSave = nil
+        } catch {
+            templateToSave = updated
+            recordError = String(localized: "No pudimos guardar la plantilla. Inténtalo de nuevo.")
         }
     }
 
@@ -976,8 +1008,51 @@ final class LiveConsoleViewModel {
     }
 
     func retrySavingRecord() async {
-        await saveRecord(updatingTemplate: savesTemplate)
+        if !isRecordSaved {
+            await saveRecord()
+        } else if let templateToSave {
+            await saveTemplate(templateToSave)
+        }
     }
+
+    // MARK: Resuming
+
+    /// "Comenzó a las 10:05 y va en «Alabanzas». …"
+    var resumeMessage: String {
+        guard let record = resumableRecord,
+              let current = record.blocks.first(where: { $0.status == .running }) else { return "" }
+        let style = Date.FormatStyle(date: .omitted, time: .shortened, locale: Locale(identifier: "es"), timeZone: session.church.timeZone)
+        return String(localized: "Comenzó a las \(record.date.formatted(style)) y va en «\(current.name)». Puedes retomarlo donde quedó.")
+    }
+
+    /// "Retomar": the same blocks, leaders and clock; the current block keeps counting from when it started.
+    func resumeService() {
+        guard let record = resumableRecord else { return }
+        resumableRecord = nil
+        guard let serviceType, let timer = BlockTimer(resuming: record, template: serviceType.blocks) else { return }
+        recordID = record.id
+        now = clock()
+        blockTimer = timer
+    }
+
+    /// "Descartar": deletes what was saved of that service; this one starts from zero.
+    func discardResumableService() async {
+        guard let record = resumableRecord else { return }
+        resumableRecord = nil
+        try? await timeRecords.delete(record.id)
+    }
+
+    /// Looks for a service of this type still in progress, saved here or synced from another console.
+    private func findResumableService() async {
+        guard let serviceType, blockTimer?.phase == .notStarted else { return }
+        let records = (try? await timeRecords.records()) ?? []
+        resumableRecord = records
+            .filter { $0.isInProgress && $0.serviceTypeID == serviceType.id }
+            .max { $0.date < $1.date }
+        isOfferingResume = resumableRecord != nil
+    }
+
+    // MARK: Leaving
 
     /// "‹ Inicio" while a block runs asks first; otherwise leaves right away.
     func requestExit(then exit: @escaping () -> Void) {
@@ -989,12 +1064,28 @@ final class LiveConsoleViewModel {
         isConfirmingExit = true
     }
 
-    /// "Terminar y guardar": leaves once the times are saved (after the template question, if any).
+    /// "Terminar y guardar": leaves once the times are saved (and the template question answered, if any).
     func finishAndExit() async {
         await finishService()
     }
 
-    func exitWithoutSaving() {
+    /// Waits until every change of the running service is in the local copy (and queued for the API).
+    func flushProgress() async {
+        await progressSave?.value
+    }
+
+    /// "Salir y retomar después": the service stays in progress, saved, and is offered again on returning.
+    func exitKeepingService() async {
+        await flushProgress()
+        let exit = pendingExit
+        pendingExit = nil
+        exit?()
+    }
+
+    /// "Descartar los tiempos": deletes what was saved of this service and leaves.
+    func discardServiceAndExit() async {
+        await flushProgress()
+        try? await timeRecords.delete(recordID)
         let exit = pendingExit
         pendingExit = nil
         exit?()
@@ -1014,8 +1105,8 @@ final class LiveConsoleViewModel {
 
     /// Installs a timer in any state. Used by previews.
     func apply(blockTimer: BlockTimer, now: Date) {
-        self.blockTimer = blockTimer
         self.now = now
+        self.blockTimer = blockTimer
         if blockTimer.phase == .finished {
             finishedRecord = makeRecord(from: blockTimer)
             isRecordSaved = true
@@ -1042,7 +1133,27 @@ final class LiveConsoleViewModel {
         guard let serviceType else { return nil }
         let date = timer.blocks.compactMap(\.startedAt).min() ?? service?.date ?? clock()
         let names = Dictionary(people.map { ($0.id, $0.name) }, uniquingKeysWith: { first, _ in first })
-        return timer.record(serviceTypeID: serviceType.id, serviceTypeName: serviceType.name, date: date, peopleNames: names)
+        return timer.record(
+            id: recordID, serviceTypeID: serviceType.id, serviceTypeName: serviceType.name,
+            date: date, peopleNames: names, now: now
+        )
+    }
+
+    /// Saves the running service as it is now. Failures are quiet: the next change, or "Terminar", saves it again.
+    private func saveProgress() {
+        guard let timer = blockTimer, let record = makeRecord(from: timer) else { return }
+        let previous = progressSave
+        let timeRecords = timeRecords
+        progressSave = Task {
+            await previous?.value
+            try? await timeRecords.save(record)
+        }
+    }
+
+    private func exitIfDone() {
+        guard isRecordSaved, !isTemplateAnswerPending, let exit = pendingExit else { return }
+        pendingExit = nil
+        exit()
     }
 
     /// "Santa Cena y Anuncios", "a, b y c".

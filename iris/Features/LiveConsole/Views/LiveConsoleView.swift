@@ -38,12 +38,27 @@ struct LiveConsoleView: View {
             Button("Terminar y guardar") {
                 Task { await viewModel.finishAndExit() }
             }
-            Button("Salir sin guardar", role: .destructive) {
-                viewModel.exitWithoutSaving()
+            Button("Salir y retomar después") {
+                Task { await viewModel.exitKeepingService() }
+            }
+            Button("Descartar los tiempos", role: .destructive) {
+                Task { await viewModel.discardServiceAndExit() }
             }
             Button("Cancelar", role: .cancel) {
                 viewModel.cancelExit()
             }
+        } message: {
+            Text("Los tiempos ya están guardados: al volver puedes retomarlo donde quedó.")
+        }
+        .alert("Hay un servicio en curso", isPresented: $viewModel.isOfferingResume) {
+            Button("Retomar") {
+                viewModel.resumeService()
+            }
+            Button("Descartar", role: .destructive) {
+                Task { await viewModel.discardResumableService() }
+            }
+        } message: {
+            Text(viewModel.resumeMessage)
         }
         .overlay(alignment: .bottom) { undoToast }
         .animation(IrisMotion.smooth, value: viewModel.recentlyRemoved)

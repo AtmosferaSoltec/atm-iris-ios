@@ -26,6 +26,9 @@ final class HomeViewModel {
     private(set) var serviceTypes: [ServiceType] = []
     private(set) var people: [Person] = []
     private(set) var recordCount = 0
+    /// Type of a service left in progress (the app closed mid-service, or another console runs it): it is
+    /// suggested first and "Iniciar servicio" becomes "Retomar servicio".
+    private(set) var inProgressServiceTypeID: ServiceType.ID?
     private(set) var library = LibraryCounts()
     private(set) var display: ExternalDisplay?
     var selectedServiceTypeID: ServiceType.ID?
@@ -198,7 +201,9 @@ final class HomeViewModel {
         availableModules = await moduleSettings.availableModules()
         let types = (try? await serviceTypeRepository.serviceTypes()) ?? []
         let people = (try? await peopleRepository.people()) ?? []
-        let recordCount = (try? await timeRecords.records().count) ?? 0
+        let records = (try? await timeRecords.records()) ?? []
+        inProgressServiceTypeID = Self.inProgressType(in: records)
+        let recordCount = records.count { !$0.isInProgress }
         let songs = (try? await libraryRepository.lyrics()) ?? []
         let library = LibraryCounts(
             lyrics: songs.count,
@@ -219,7 +224,9 @@ final class HomeViewModel {
         availableModules = await moduleSettings.availableModules()
         let types = try? await serviceTypeRepository.serviceTypes()
         let people = try? await peopleRepository.people()
-        let recordCount = try? await timeRecords.records().count
+        let records = try? await timeRecords.records()
+        let recordCount = records?.count { !$0.isInProgress }
+        if let records { inProgressServiceTypeID = Self.inProgressType(in: records) }
 
         // A failed request keeps what is already on screen.
         serviceTypes = types ?? serviceTypes
@@ -322,7 +329,16 @@ final class HomeViewModel {
     // MARK: Private
 
     /// Today's next scheduled service, else the first type.
+    var resumesSelectedService: Bool {
+        selectedServiceTypeID != nil && selectedServiceTypeID == inProgressServiceTypeID
+    }
+
+    private static func inProgressType(in records: [ServiceRecord]) -> ServiceType.ID? {
+        records.filter(\.isInProgress).max { $0.date < $1.date }?.serviceTypeID
+    }
+
     private func suggestedServiceType(in types: [ServiceType]) -> ServiceType? {
+        if let running = types.first(where: { $0.id == inProgressServiceTypeID }) { return running }
         let calendar = session.calendar
         let weekday = calendar.component(.weekday, from: now())
         let minutesNow = calendar.component(.hour, from: now()) * 60 + calendar.component(.minute, from: now())

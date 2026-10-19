@@ -86,10 +86,12 @@ nonisolated struct TimeStatistics: Sendable {
         var entries: [Entry] = []
         var services: [(actual: TimeInterval, planned: TimeInterval)] = []
         for record in records.sorted(by: { $0.date > $1.date }) {
+            // A service still in progress counts once it ends.
+            if record.isInProgress { continue }
             if let range, !range.contains(record.date) { continue }
             if let typeID = filter.serviceTypeID, record.serviceTypeID != typeID { continue }
             let counted = record.blocks.filter { block in
-                block.status != .skipped
+                block.hasTime
                     && (blockKey == nil || block.name.nameKey == blockKey)
                     && (filter.personID == nil || block.personID == filter.personID)
             }

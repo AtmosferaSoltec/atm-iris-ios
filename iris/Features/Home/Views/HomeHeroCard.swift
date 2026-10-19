@@ -144,7 +144,11 @@ struct HomeHeroCard: View {
             Button {
                 Task { await viewModel.startSelectedService() }
             } label: {
-                Label("Iniciar servicio", systemImage: "play.fill")
+                if viewModel.resumesSelectedService {
+                    Label("Retomar servicio", systemImage: "play.fill")
+                } else {
+                    Label("Iniciar servicio", systemImage: "play.fill")
+                }
             }
             .buttonStyle(.irisPrimary(isLoading: viewModel.isStartingService))
             .frame(width: 280)

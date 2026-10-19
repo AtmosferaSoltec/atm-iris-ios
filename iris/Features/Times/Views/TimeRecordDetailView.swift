@@ -100,6 +100,7 @@ private struct TimeBlockRow: View {
     let scale: TimeInterval
 
     private var isSkipped: Bool { block.status == .skipped }
+    private var isPending: Bool { block.status == .pending }
 
     var body: some View {
         HStack(spacing: IrisSpacing.md) {
@@ -107,10 +108,12 @@ private struct TimeBlockRow: View {
                 HStack(spacing: IrisSpacing.xs) {
                     Text(block.name)
                         .font(IrisFont.calloutEmphasized)
-                        .foregroundStyle(isSkipped ? IrisColor.textTertiary : IrisColor.textPrimary)
+                        .foregroundStyle(isSkipped || isPending ? IrisColor.textTertiary : IrisColor.textPrimary)
                         .lineLimit(1)
                     if block.status == .adjusted {
                         IrisChip("Ajustado", tint: IrisColor.textSecondary)
+                    } else if block.status == .running {
+                        IrisChip("En curso", tint: IrisColor.live)
                     }
                 }
                 Text(viewModel.leaderName(of: block))
@@ -120,15 +123,15 @@ private struct TimeBlockRow: View {
             }
             .frame(width: 200, alignment: .leading)
 
-            if isSkipped {
+            if isSkipped || isPending {
                 Spacer()
-                Text("Omitido")
+                Text(isSkipped ? "Omitido" : "Pendiente")
                     .font(IrisFont.caption)
                     .foregroundStyle(IrisColor.textTertiary)
             } else {
                 IrisTimeBar(planned: block.plannedSeconds, actual: block.actualSeconds, scale: scale)
                 times
-                if viewModel.canManage {
+                if viewModel.canAdjust(record) {
                     menu
                 }
             }

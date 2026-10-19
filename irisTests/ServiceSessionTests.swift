@@ -175,11 +175,11 @@ struct ServiceSessionTests {
         viewModel.requestFinish()
         await viewModel.finishService()
         #expect(viewModel.isAskingTemplateUpdate)
-        #expect(viewModel.isRecordSaved == false)
+        // The times don't wait for the answer: closing the app now loses nothing.
+        #expect(viewModel.isRecordSaved)
         #expect(viewModel.templateChangesMessage == "Agregaste Santa Cena y omitiste Anuncios.")
 
-        await viewModel.saveRecord(updatingTemplate: true)
-        #expect(viewModel.isRecordSaved)
+        await viewModel.answerTemplateUpdate(updatingTemplate: true)
         #expect(store.serviceTypes[0].blocks.map(\.name) == ["Bienvenida", "Santa Cena", "Alabanzas", "Prédica"])
         let saved = try #require(store.records.first { $0.id == viewModel.finishedRecord?.id })
         #expect(saved.blocks.map(\.status) == [.completed, .completed, .skipped, .skipped, .skipped])
@@ -195,7 +195,7 @@ struct ServiceSessionTests {
 
         await viewModel.finishService()
         #expect(viewModel.isAskingTemplateUpdate)
-        await viewModel.saveRecord(updatingTemplate: false)
+        await viewModel.answerTemplateUpdate(updatingTemplate: false)
 
         #expect(store.serviceTypes[0].blocks == culto.blocks)
         #expect(store.records.count == MockChurchData.records.count + 1)
@@ -250,9 +250,111 @@ struct ServiceSessionTests {
         #expect(viewModel.isConfirmingExit)
         #expect(exits == 0)
 
-        viewModel.exitWithoutSaving()
+        await viewModel.exitKeepingService()
+        #expect(exits == 1)
+        // Leaving keeps the service in progress, to resume it later.
+        #expect(store.records.count == MockChurchData.records.count + 1)
+        #expect(store.records.contains { $0.isInProgress })
+    }
+
+    @Test func discardingWhileRunningDeletesItsTimes() async throws {
+        let viewModel = console(serviceType: culto)
+        viewModel.startBlocks()
+        try confirmSuggested(viewModel)
+        var exits = 0
+
+        viewModel.requestExit { exits += 1 }
+        await viewModel.discardServiceAndExit()
+
         #expect(exits == 1)
         #expect(store.records.count == MockChurchData.records.count)
+    }
+
+    // MARK: Saving as it runs
+
+    @Test func startingSavesTheServiceInProgress() async throws {
+        let viewModel = console(serviceType: culto)
+        let start = clock.now
+        viewModel.startBlocks()
+        try confirmSuggested(viewModel)
+        await viewModel.flushProgress()
+
+        let saved = try #require(store.records.first { $0.isInProgress })
+        #expect(saved.date == start)
+        #expect(saved.blocks.map(\.status) == [.running, .pending, .pending, .pending])
+        #expect(saved.blocks[0].startedAt == start)
+        #expect(saved.blocks[0].personName == "Carlos Pérez")
+        // Leaders chosen ahead are kept, so resuming finds them.
+        #expect(saved.blocks.map(\.personName) == ["Carlos Pérez", "Ana Torres", "Daniel Ruiz", "Lucía Gómez"])
+
+        clock.advance(minutes: 10)
+        viewModel.goToNextBlock()
+        try confirmSuggested(viewModel)
+        await viewModel.flushProgress()
+
+        let advanced = try #require(store.records.first { $0.id == saved.id })
+        #expect(advanced.blocks.map(\.status) == [.completed, .running, .pending, .pending])
+        #expect(advanced.blocks[0].actualSeconds == 600)
+        #expect(store.records.count == MockChurchData.records.count + 1)
+    }
+
+    @Test func reopeningTheConsoleResumesWhereItWas() async throws {
+        let first = console(serviceType: culto)
+        first.startBlocks()
+        try confirmSuggested(first)
+        clock.advance(minutes: 10)
+        first.goToNextBlock()
+        try confirmSuggested(first)
+        let anuncios = try #require(first.pendingBlocks.last)
+        first.toggleSkip(anuncios.id)
+        await first.flushProgress()
+
+        // The app closed; 3 minutes later the console opens again.
+        clock.advance(minutes: 3)
+        let reopened = console(serviceType: culto)
+        await reopened.load()
+        #expect(reopened.isOfferingResume)
+        #expect(reopened.resumeMessage.contains("«Alabanzas»"))
+
+        reopened.resumeService()
+        #expect(reopened.isTimerRunning)
+        #expect(reopened.currentBlock?.name == "Alabanzas")
+        #expect(reopened.currentElapsed == 180)
+        #expect(reopened.blockTimer?.blocks == first.blockTimer?.blocks)
+        #expect(reopened.breadcrumbs.map(\.state) == [.done(isOver: false), .current, .pending, .skipped])
+
+        clock.advance(minutes: 2)
+        await reopened.finishService()
+        let saved = try #require(store.records.first { $0.id == reopened.finishedRecord?.id })
+        #expect(saved.status == .finished)
+        #expect(saved.blocks.map(\.actualSeconds) == [600, 300, 0, 0])
+        #expect(store.records.count == MockChurchData.records.count + 1)
+    }
+
+    @Test func discardingTheServiceInProgressStartsFromZero() async throws {
+        let first = console(serviceType: culto)
+        first.startBlocks()
+        try confirmSuggested(first)
+        await first.flushProgress()
+
+        let reopened = console(serviceType: culto)
+        await reopened.load()
+        #expect(reopened.isOfferingResume)
+        await reopened.discardResumableService()
+
+        #expect(reopened.blockTimer?.phase == .notStarted)
+        #expect(store.records.count == MockChurchData.records.count)
+    }
+
+    @Test func aFinishedServiceIsNotOfferedAgain() async throws {
+        let first = console(serviceType: culto)
+        first.startBlocks()
+        try confirmSuggested(first)
+        await first.finishService()
+
+        let reopened = console(serviceType: culto)
+        await reopened.load()
+        #expect(reopened.isOfferingResume == false)
     }
 
     @Test func finishAndExitSavesThenLeaves() async throws {

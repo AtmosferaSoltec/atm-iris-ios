@@ -83,22 +83,39 @@ nonisolated struct BlockTemplate: Identifiable, Hashable, Sendable {
 
 /// The saved timing of one service. Only times are stored, never the content used.
 nonisolated struct ServiceRecord: Identifiable, Hashable, Sendable {
+    /// The console saves the record from the first block on and sends it again on every change, so a service
+    /// survives the app closing: it stays `inProgress` until "Terminar" (contract §14).
+    enum Status: Hashable, Sendable {
+        case inProgress, finished
+    }
+
     let id: UUID
+    var status: Status
     var date: Date
     var serviceTypeID: ServiceType.ID
     /// Name of the service type when the record was saved, shown if the type is deleted.
     var serviceTypeName: String?
     var blocks: [BlockRecord]
 
-    init(id: UUID = UUID(), date: Date, serviceTypeID: ServiceType.ID, serviceTypeName: String? = nil, blocks: [BlockRecord]) {
+    init(
+        id: UUID = UUID(),
+        status: Status = .finished,
+        date: Date,
+        serviceTypeID: ServiceType.ID,
+        serviceTypeName: String? = nil,
+        blocks: [BlockRecord]
+    ) {
         self.id = id
+        self.status = status
         self.date = date
         self.serviceTypeID = serviceTypeID
         self.serviceTypeName = serviceTypeName
         self.blocks = blocks
     }
 
-    private var countedBlocks: [BlockRecord] { blocks.filter { $0.status != .skipped } }
+    var isInProgress: Bool { status == .inProgress }
+
+    private var countedBlocks: [BlockRecord] { blocks.filter(\.hasTime) }
 
     var plannedSeconds: TimeInterval { countedBlocks.reduce(0) { $0 + $1.plannedSeconds } }
     var actualSeconds: TimeInterval { countedBlocks.reduce(0) { $0 + $1.actualSeconds } }
@@ -107,6 +124,8 @@ nonisolated struct ServiceRecord: Identifiable, Hashable, Sendable {
 
 nonisolated struct BlockRecord: Identifiable, Hashable, Sendable {
     enum Status: Hashable, Sendable {
+        /// Only in a service in progress: not reached yet, and the block that runs now.
+        case pending, running
         case completed, skipped, adjusted
     }
 
@@ -118,6 +137,9 @@ nonisolated struct BlockRecord: Identifiable, Hashable, Sendable {
     /// Name of the person when the record was saved, so it stays readable after a rename or delete.
     var personName: String?
     var status: Status
+    /// The console's clock, kept so a running block can be resumed where it was.
+    var startedAt: Date?
+    var endedAt: Date?
 
     init(
         id: UUID = UUID(),
@@ -126,7 +148,9 @@ nonisolated struct BlockRecord: Identifiable, Hashable, Sendable {
         actualSeconds: TimeInterval,
         personID: Person.ID?,
         personName: String? = nil,
-        status: Status = .completed
+        status: Status = .completed,
+        startedAt: Date? = nil,
+        endedAt: Date? = nil
     ) {
         self.id = id
         self.name = name
@@ -135,11 +159,16 @@ nonisolated struct BlockRecord: Identifiable, Hashable, Sendable {
         self.personID = personID
         self.personName = personName
         self.status = status
+        self.startedAt = startedAt
+        self.endedAt = endedAt
     }
+
+    /// Skipped and pending blocks have no time of their own and don't count in totals.
+    var hasTime: Bool { status != .skipped && status != .pending }
 
     /// Any second over planned counts — there is no tolerance margin.
     var overtimeSeconds: TimeInterval { max(0, actualSeconds - plannedSeconds) }
-    var isOver: Bool { status != .skipped && actualSeconds > plannedSeconds }
+    var isOver: Bool { hasTime && actualSeconds > plannedSeconds }
 
     /// The person's current name if they still exist, else the name saved with the record.
     func resolvedPersonName(in people: [Person]) -> String? {

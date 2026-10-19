@@ -146,6 +146,8 @@ nonisolated extension ServiceType {
 nonisolated extension BlockRecord.Status {
     init(_ dto: BlockStatusDTO) {
         switch dto {
+        case .pending: self = .pending
+        case .running: self = .running
         case .skipped: self = .skipped
         case .adjusted: self = .adjusted
         case .completed, .unknown: self = .completed
@@ -154,9 +156,24 @@ nonisolated extension BlockRecord.Status {
 
     var dto: BlockStatusDTO {
         switch self {
+        case .pending: .pending
+        case .running: .running
         case .completed: .completed
         case .skipped: .skipped
         case .adjusted: .adjusted
+        }
+    }
+}
+
+nonisolated extension ServiceRecord.Status {
+    init(_ dto: RecordStatusDTO?) {
+        self = dto == .inProgress ? .inProgress : .finished
+    }
+
+    var dto: RecordStatusDTO {
+        switch self {
+        case .inProgress: .inProgress
+        case .finished: .finished
         }
     }
 }
@@ -165,6 +182,7 @@ nonisolated extension ServiceRecord {
     init(_ dto: ServiceRecordDTO) throws {
         self.init(
             id: try UUID(apiID: dto.id),
+            status: ServiceRecord.Status(dto.status),
             date: dto.date,
             serviceTypeID: try UUID(apiID: dto.serviceTypeId),
             serviceTypeName: dto.serviceTypeName,
@@ -176,15 +194,18 @@ nonisolated extension ServiceRecord {
                     actualSeconds: TimeInterval(block.actualSeconds),
                     personID: try block.personId.map(UUID.init(apiID:)),
                     personName: block.personName,
-                    status: BlockRecord.Status(block.status)
+                    status: BlockRecord.Status(block.status),
+                    startedAt: block.startedAt,
+                    endedAt: block.endedAt
                 )
             }
         )
     }
 
-    /// Body of `PUT /service-records/:id`. A new record only has completed or skipped blocks.
+    /// Body of `PUT /service-records/:id`.
     var inputDTO: ServiceRecordInputDTO {
         ServiceRecordInputDTO(
+            status: status.dto,
             date: date,
             serviceTypeId: serviceTypeID.apiString,
             serviceTypeName: serviceTypeName ?? "",
@@ -196,6 +217,7 @@ nonisolated extension ServiceRecord {
     func dto(createdAt: Date, updatedAt: Date) -> ServiceRecordDTO {
         ServiceRecordDTO(
             id: id.apiString,
+            status: status.dto,
             date: date,
             serviceTypeId: serviceTypeID.apiString,
             serviceTypeName: serviceTypeName ?? "",
@@ -212,10 +234,12 @@ nonisolated extension BlockRecord {
             id: id.apiString,
             name: name,
             plannedSeconds: Int(plannedSeconds.rounded()),
-            actualSeconds: status == .skipped ? 0 : Int(actualSeconds.rounded()),
+            actualSeconds: hasTime ? Int(actualSeconds.rounded()) : 0,
             personId: personID?.apiString,
             personName: personName,
-            status: status.dto
+            status: status.dto,
+            startedAt: startedAt,
+            endedAt: endedAt
         )
     }
 }

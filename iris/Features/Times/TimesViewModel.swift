@@ -102,6 +102,9 @@ final class TimesViewModel {
     /// Adjusting, changing leaders and deleting need `records.manage`.
     var canManage: Bool { context.can(.recordsManage) }
 
+    /// A service in progress is corrected once it ends: the console that runs it would overwrite the change.
+    func canAdjust(_ record: ServiceRecord) -> Bool { canManage && !record.isInProgress }
+
     /// Reloads silently when a sync brings records from other consoles, until the calling task is cancelled.
     func observeChanges() async {
         let streams = [timeRecords.changes(), serviceTypeRepository.changes(), peopleRepository.changes()]
@@ -207,7 +210,7 @@ final class TimesViewModel {
 
     /// Common scale for the bars of a record's blocks.
     func barScale(for record: ServiceRecord) -> TimeInterval {
-        max(1, record.blocks.filter { $0.status != .skipped }.map { max($0.plannedSeconds, $0.actualSeconds) }.max() ?? 1)
+        max(1, record.blocks.filter(\.hasTime).map { max($0.plannedSeconds, $0.actualSeconds) }.max() ?? 1)
     }
 
     func setRecordFilter(_ typeID: ServiceType.ID?) {

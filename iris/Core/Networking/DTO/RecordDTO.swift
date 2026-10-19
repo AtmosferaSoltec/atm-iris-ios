@@ -8,7 +8,11 @@
 import Foundation
 
 nonisolated enum BlockStatusDTO: String, TolerantStringEnum {
-    case completed, skipped, adjusted, unknown
+    case pending, running, completed, skipped, adjusted, unknown
+}
+
+nonisolated enum RecordStatusDTO: String, TolerantStringEnum {
+    case inProgress, finished, unknown
 }
 
 nonisolated struct BlockRecordDTO: Codable, Hashable, Sendable {
@@ -19,6 +23,9 @@ nonisolated struct BlockRecordDTO: Codable, Hashable, Sendable {
     let personId: String?
     let personName: String?
     let status: BlockStatusDTO
+    /// Missing in records saved before the API kept them.
+    let startedAt: Date?
+    let endedAt: Date?
 
     // Optional fields travel as `null`, never omitted.
     func encode(to encoder: any Encoder) throws {
@@ -30,11 +37,15 @@ nonisolated struct BlockRecordDTO: Codable, Hashable, Sendable {
         try container.encode(personId, forKey: .personId)
         try container.encode(personName, forKey: .personName)
         try container.encode(status, forKey: .status)
+        try container.encode(startedAt, forKey: .startedAt)
+        try container.encode(endedAt, forKey: .endedAt)
     }
 }
 
 nonisolated struct ServiceRecordDTO: Codable, Hashable, Sendable {
     let id: String
+    /// Missing in local copies saved before the API kept it: those are finished.
+    let status: RecordStatusDTO?
     let date: Date
     let serviceTypeId: String
     let serviceTypeName: String
@@ -43,8 +54,9 @@ nonisolated struct ServiceRecordDTO: Codable, Hashable, Sendable {
     let updatedAt: Date
 }
 
-/// Body of `PUT /service-records/:id`. Block status is `completed` or `skipped` when created.
+/// Body of `PUT /service-records/:id`: `inProgress` from "Comenzar" on, `finished` at the end.
 nonisolated struct ServiceRecordInputDTO: Encodable, Hashable, Sendable {
+    let status: RecordStatusDTO
     let date: Date
     let serviceTypeId: String
     let serviceTypeName: String

@@ -183,4 +183,67 @@ struct BlockTimerTests {
         #expect(timer.nextBlock?.name == "Alabanzas")
         #expect(timer.hasTemplateChanges == false)
     }
+
+    // MARK: Saving as it runs
+
+    @Test func recordWhileRunningSaysWhereTheServiceIs() throws {
+        var timer = BlockTimer(template: template)
+        timer.start(personID: daniel, at: at(0))
+        timer.advance(nextPersonID: ana, at: at(600))
+        timer.skip(template[3].id)
+        let id = UUID()
+
+        let record = timer.record(id: id, serviceTypeID: UUID(), date: at(0), peopleNames: [ana: "Ana Torres"], now: at(700))
+        #expect(record.status == .inProgress)
+        #expect(record.blocks.map(\.status) == [.completed, .running, .pending, .skipped])
+        #expect(record.blocks.map(\.actualSeconds) == [600, 100, 0, 0])
+        #expect(record.blocks.map(\.startedAt) == [at(0), at(600), nil, nil])
+        #expect(record.blocks.map(\.endedAt) == [at(600), nil, nil, nil])
+        // Leaders of blocks still to come are kept for resuming.
+        #expect(record.blocks.map(\.personID) == [daniel, ana, daniel, nil])
+        // Same block ids on every save of this service, never the template's (they repeat every week).
+        #expect(record.blocks.map(\.id) == timer.record(id: id, serviceTypeID: UUID(), date: at(0), peopleNames: [:]).blocks.map(\.id))
+        #expect(Set(record.blocks.map(\.id)).isDisjoint(with: template.map(\.id)))
+        #expect(record.blocks[0].id != timer.record(id: UUID(), serviceTypeID: UUID(), date: at(0), peopleNames: [:]).blocks[0].id)
+    }
+
+    @Test func resumingRestoresTheSameTimer() throws {
+        var timer = BlockTimer(template: template)
+        timer.start(personID: daniel, at: at(0))
+        timer.addBlock(name: "Santa Cena", plannedMinutes: 12, personID: ana)
+        timer.updatePending(template[2].id, name: "Mensaje", plannedMinutes: 35, personID: nil)
+        timer.advance(nextPersonID: ana, at: at(600))
+        timer.skip(template[3].id)
+        let record = timer.record(id: UUID(), serviceTypeID: UUID(), date: at(0), peopleNames: [:], now: at(700))
+
+        let resumed = try #require(BlockTimer(resuming: record, template: template))
+        #expect(resumed == timer)
+        #expect(resumed.currentBlock?.name == "Santa Cena")
+        #expect(resumed.elapsed(of: try #require(resumed.currentBlock).id, now: at(900)) == 300)
+        #expect(resumed.templateChanges == timer.templateChanges)
+    }
+
+    @Test func resumingMatchesTemplateBlocksWhateverTheirUUIDVersion() throws {
+        // Ids made by the API are version 7.
+        let fromAPI = [
+            BlockTemplate(id: try #require(UUID(uuidString: "0199aaaa-0000-7000-8000-000000000001")), name: "Bienvenida", plannedMinutes: 10),
+            BlockTemplate(id: try #require(UUID(uuidString: "0199aaaa-0000-7000-8000-000000000002")), name: "Prédica", plannedMinutes: 40)
+        ]
+        var timer = BlockTimer(template: fromAPI)
+        timer.start(personID: nil, at: at(0))
+        let record = timer.record(id: UUID(), serviceTypeID: UUID(), date: at(0), peopleNames: [:], now: at(60))
+
+        let resumed = try #require(BlockTimer(resuming: record, template: fromAPI))
+        #expect(resumed.blocks.map(\.id) == fromAPI.map(\.id))
+        #expect(resumed.hasTemplateChanges == false)
+    }
+
+    @Test func onlyARunningServiceCanBeResumed() {
+        var timer = BlockTimer(template: template)
+        timer.start(personID: nil, at: at(0))
+        timer.finish(at: at(60))
+        let record = timer.record(serviceTypeID: UUID(), date: at(0), peopleNames: [:])
+        #expect(record.status == .finished)
+        #expect(BlockTimer(resuming: record, template: template) == nil)
+    }
 }

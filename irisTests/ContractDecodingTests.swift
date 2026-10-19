@@ -77,6 +77,26 @@ struct ContractDecodingTests {
         #expect(record.actualSeconds == 2700)
     }
 
+    @Test func serviceRecordInProgressKeepsItsClock() throws {
+        let json = """
+        {"id":"0199bbbb-0000-7000-8000-000000000001","status":"inProgress","date":"2026-10-04T15:00:00.000Z",
+        "serviceTypeId":"0199cccc-0000-7000-8000-000000000001","serviceTypeName":"Culto general","blocks":[
+        {"id":"0199bbbb-0000-7000-8000-000000000002","name":"Bienvenida","plannedSeconds":600,"actualSeconds":0,"personId":null,
+        "personName":null,"status":"running","startedAt":"2026-10-04T15:00:00.000Z","endedAt":null},
+        {"id":"0199bbbb-0000-7000-8000-000000000003","name":"Prédica","plannedSeconds":2400,"actualSeconds":0,"personId":null,
+        "personName":null,"status":"pending","startedAt":null,"endedAt":null}],
+        "createdAt":"2026-10-04T15:00:00.000Z","updatedAt":"2026-10-04T15:00:00.000Z"}
+        """
+        let record = try ServiceRecord(decode(json, as: ServiceRecordDTO.self))
+        #expect(record.isInProgress)
+        #expect(record.blocks.map(\.status) == [.running, .pending])
+        #expect(record.blocks.first?.startedAt == record.date)
+        #expect(record.inputDTO.status == .inProgress)
+
+        // Records saved before the API kept a status are finished.
+        #expect(try ServiceRecord(decode(ContractSamples.serviceRecord, as: ServiceRecordDTO.self)).status == .finished)
+    }
+
     @Test func optionalFieldsTravelAsNull() throws {
         let block = BlockRecord(name: "Prédica", plannedSeconds: 60, actualSeconds: 70, personID: nil)
         let json = try #require(String(data: JSONCoding.encoder.encode(block.dto), encoding: .utf8))
