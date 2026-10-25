@@ -51,7 +51,7 @@ struct ContractDecodingTests {
             hasMore: true
         )
         let page = try decode(json, as: SyncPageDTO.self)
-        #expect(page.church?.modules.multimedia == false)
+        #expect(page.church?.name == "Iglesia Vida Nueva")
         #expect(page.changes.people.map(\.name) == ["Ana Torres"])
         #expect(page.deleted.people == ["0199dddd-0000-7000-8000-000000000002"])
         #expect(page.cursor == "42")

@@ -66,16 +66,6 @@ nonisolated extension UserSession {
 
 // MARK: Church
 
-nonisolated extension ChurchModules {
-    init(_ dto: ChurchModulesDTO) {
-        self.init(bible: dto.bible, multimedia: dto.multimedia, timeControl: dto.timeControl)
-    }
-
-    var dto: ChurchModulesDTO {
-        ChurchModulesDTO(bible: bible, multimedia: multimedia, timeControl: timeControl)
-    }
-}
-
 nonisolated extension ProjectionSettings {
     init(_ dto: ProjectionSettingsDTO?) {
         guard let dto else { self.init(); return }

@@ -57,7 +57,8 @@ struct SyncEngineTests {
         #expect(await stack.store.all(.people, as: PersonDTO.self).map(\.name) == ["Ana Torres", "Luis Vega"])
         #expect(stack.sync.initialSync == .ready)
         let modules = try await LiveModuleSettingsRepository(data: stack.data).modules()
-        #expect(modules.multimedia == false)
+        // No modules anymore (contract §6): always everything, whatever the copy says.
+        #expect(modules == .everything)
     }
 
     @Test func nextSyncStartsFromTheSavedCursorAndAppliesDeletions() async throws {

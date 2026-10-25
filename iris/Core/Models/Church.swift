@@ -21,11 +21,15 @@ nonisolated struct Person: Identifiable, Hashable, Sendable {
     }
 }
 
-/// Church-wide feature switches. Letras is always on.
+/// What the console offers. Iris no longer has modules (contract §6): every church has songs,
+/// multimedia and time control, and the Bible is out for now — that is `.everything`. The type
+/// stays until the console is rebuilt as a controller of the web screen; nothing can switch it.
 nonisolated struct ChurchModules: Equatable, Sendable {
-    var bible = true
+    var bible = false
     var multimedia = true
     var timeControl = true
+
+    static let everything = ChurchModules()
 }
 
 /// A kind of service the church holds (Culto general, Jóvenes, ABC…).

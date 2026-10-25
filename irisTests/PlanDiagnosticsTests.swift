@@ -55,17 +55,12 @@ struct PlanDiagnosticsTests {
         let uploaded = await library.uploadedMedia()
 
         var report = ["", "=== DIAGNÓSTICO DEL PLAN (lo que vería el iPad) ==="]
-        report.append("Iglesia: \(church?.name ?? "?") · módulos: \(String(describing: church?.modules))")
+        report.append("Iglesia: \(church?.name ?? "?")")
         report.append("Copia local: \(lyrics.count) canciones (\(lyrics.count { $0.audio != nil }) con pista), \(uploaded.count) multimedia")
         report.append("Plan en el servidor/copia local: \(entries.count) elementos")
         for entry in entries { report.append("  · \(entry.kind) \(entry.refId.prefix(8))… posición \(entry.position)") }
         report.append("Lo que la consola carga: \(plan.items.count) elementos")
         for item in plan.items { report.append("  ✓ \(item.kind) · \(item.title)") }
-        let multimediaOn = church?.modules.multimedia ?? true
-        if !multimediaOn {
-            let hidden = plan.items.filter { [.image, .video].contains($0.kind) }.count
-            report.append("⚠︎ Multimedia apagada: la consola ocultaría \(hidden) elemento(s) (imagen o video)")
-        }
         let lost = entries.count - plan.items.count
         if lost > 0 { report.append("⚠︎ \(lost) elemento(s) del plan no se resolvieron en la copia local") }
         report.append("=== FIN ===")

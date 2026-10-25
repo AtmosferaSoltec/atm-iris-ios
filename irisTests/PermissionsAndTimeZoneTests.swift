@@ -55,12 +55,8 @@ struct PermissionsTests {
         #expect(!visible.template)
     }
 
-    @Test func operatorCannotFlipModulesOrCreateServices() {
+    @Test func operatorCannotCreateServices() {
         let store = InMemoryChurchStore()
-        let modules = ModulesViewModel(moduleSettings: MockModuleSettingsRepository(store: store, latency: .zero), session: .preview(role: .operator))
-        modules.apply(modules: ChurchModules())
-        modules.setModule(.bible, isOn: false)
-        #expect(modules.isOn(.bible))
 
         let services = ServiceTypesViewModel(
             serviceTypes: MockServiceTypeRepository(store: store, latency: .zero),

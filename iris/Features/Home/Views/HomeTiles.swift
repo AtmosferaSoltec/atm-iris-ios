@@ -138,38 +138,15 @@ struct ModulesTile: View {
     var body: some View {
         IrisTile(
             "Configuración",
-            subtitle: String(localized: "Qué usa tu iglesia y cómo se ve"),
+            subtitle: String(localized: "Cómo se ve la letra"),
             systemImage: "switch.2",
             tint: IrisColor.success,
             action: { viewModel.openModules() }
         ) {
-            VStack(spacing: IrisSpacing.sm) {
-                row("Letras", isOn: true)
-                if viewModel.availableModules.bible {
-                    row("Biblia", isOn: viewModel.modules.bible)
-                }
-                row("Multimedia", isOn: viewModel.modules.multimedia)
-                row("Control de tiempo", isOn: viewModel.modules.timeControl)
-            }
-        }
-    }
-
-    private func row(_ title: LocalizedStringKey, isOn: Bool) -> some View {
-        HStack {
-            Text(title)
+            Text("Tipografía, tamaño y fondo por defecto de la letra proyectada.")
                 .font(IrisFont.callout)
-                .foregroundStyle(IrisColor.textPrimary)
-            Spacer()
-            HStack(spacing: IrisSpacing.xxs + 2) {
-                Circle()
-                    .fill(isOn ? IrisColor.success : IrisColor.textTertiary)
-                    .frame(width: 7, height: 7)
-                Group {
-                    if isOn { Text("Activo") } else { Text("Apagado") }
-                }
-                .font(IrisFont.caption)
-                .foregroundStyle(isOn ? IrisColor.textSecondary : IrisColor.textTertiary)
-            }
+                .foregroundStyle(IrisColor.textSecondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }

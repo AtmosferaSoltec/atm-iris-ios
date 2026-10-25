@@ -27,11 +27,6 @@ struct ModulesView: View {
                             if let errorMessage = viewModel.errorMessage {
                                 IrisBanner(style: .error, message: errorMessage)
                             }
-                            if !viewModel.canManage {
-                                IrisBanner(style: .info, message: String(localized: "Solo un administrador puede cambiar los módulos."))
-                            }
-                            moduleList
-                                .disabled(!viewModel.canManage)
                             projectionRow
                         }
                     }
@@ -74,7 +69,6 @@ struct ModulesView: View {
                     .font(.system(.footnote, weight: .semibold))
                     .foregroundStyle(IrisColor.textTertiary)
             }
-            .padding(.top, IrisSpacing.lg)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -86,72 +80,10 @@ struct ModulesView: View {
                 .font(IrisFont.headline)
                 .tracking(IrisTracking.tight)
                 .foregroundStyle(IrisColor.textPrimary)
-            Text("Elige qué partes de Iris usa tu iglesia. Lo que apagues desaparece de la consola.")
+            Text("Cómo se ve la letra en la pantalla. Lo demás se configura en la web.")
                 .font(IrisFont.callout)
                 .foregroundStyle(IrisColor.textSecondary)
         }
-    }
-
-    private var moduleList: some View {
-        VStack(spacing: 0) {
-            ForEach(viewModel.visibleModules) { module in
-                if module != viewModel.visibleModules.first {
-                    Divider()
-                        .overlay(IrisColor.stroke)
-                }
-                ModuleRow(
-                    module: module,
-                    isOn: Binding(
-                        get: { viewModel.isOn(module) },
-                        set: { viewModel.setModule(module, isOn: $0) }
-                    )
-                )
-                if module == .timeControl, viewModel.showsTimeControlNote {
-                    IrisBanner(
-                        style: .info,
-                        message: String(localized: "Los tiempos guardados se conservan. Puedes volver a activarlo cuando quieras.")
-                    )
-                    .padding(.bottom, IrisSpacing.md)
-                    .transition(.opacity)
-                }
-            }
-        }
-        .animation(IrisMotion.smooth, value: viewModel.showsTimeControlNote)
-    }
-}
-
-/// Tinted icon, name, description and switch.
-private struct ModuleRow: View {
-    let module: ModulesViewModel.Module
-    @Binding var isOn: Bool
-
-    var body: some View {
-        HStack(spacing: IrisSpacing.md) {
-            Image(systemName: module.systemImage)
-                .font(.system(.body, weight: .semibold))
-                .foregroundStyle(module.tint)
-                .frame(width: 40, height: 40)
-                .background(module.tint.opacity(0.14), in: RoundedRectangle(cornerRadius: IrisRadius.sm, style: .continuous))
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(module.title)
-                    .font(IrisFont.bodyEmphasized)
-                    .foregroundStyle(IrisColor.textPrimary)
-                Text(module.summary)
-                    .font(IrisFont.callout)
-                    .foregroundStyle(IrisColor.textSecondary)
-            }
-
-            Spacer(minLength: IrisSpacing.md)
-
-            Toggle(isOn: $isOn) {
-                Text(module.title)
-            }
-            .labelsHidden()
-            .tint(IrisColor.coral)
-            .disabled(module.isAlwaysOn)
-        }
-        .padding(.vertical, IrisSpacing.md)
     }
 }
 

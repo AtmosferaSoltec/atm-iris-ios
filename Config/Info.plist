@@ -13,7 +13,5 @@
 	<array>
 		<string>audio</string>
 	</array>
-	<key>NSLocalNetworkUsageDescription</key>
-	<string>Iris se conecta al servidor de tu iglesia en la red local.</string>
 </dict>
 </plist>

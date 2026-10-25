@@ -82,8 +82,7 @@ struct AppDependencies {
         // Nothing reads that folder any more and Files no longer shows it, so it only took space.
         try? FileManager.default.removeItem(at: URL.documentsDirectory.appending(path: "Música", directoryHint: .isDirectory))
 
-        // Media files follow each sync, in the background: images, videos and backgrounds with the
-        // Multimedia module; song tracks always (contract §6). What is in the plan downloads now, so
+        // Media files follow each sync, in the background. What is in the plan downloads now, so
         // the console opens with it ready — whether the web, this iPad or another console added it.
         let mediaCache = MediaCache(client: client, downloader: .shared)
         Task {
@@ -100,10 +99,7 @@ struct AppDependencies {
         }
         sync.afterSync.append {
             guard let churchID = await localStore.churchID() else { return }
-            let church = await localStore.all(.church, as: ChurchDTO.self).first
-            let showsMultimedia = church?.modules.multimedia ?? true
             let assets = await localStore.all(.media, as: MediaAssetDTO.self)
-                .filter { showsMultimedia || $0.kind == .audio }
             let planIDs = await Self.planFileIDs(in: localStore)
             Task {
                 await mediaCache.use(churchID: churchID)
@@ -112,18 +108,8 @@ struct AppDependencies {
         }
         sync.onDiscard.append { await mediaCache.clear() }
 
-        // The Bible downloads after the first sync (module on) and is checked for a new version once a day.
+        // The Bible is out for now (contract §13): nothing downloads it; the picker is never offered.
         let bibleStore = BibleStore(client: client)
-        sync.afterSync.append {
-            let church = await localStore.all(.church, as: ChurchDTO.self).first
-            guard church?.modules.bible ?? true else { return }
-            let lastCheck = await localStore.bibleCheckedAt()
-            Task {
-                if await bibleStore.ensureAvailable(lastCheck: lastCheck) {
-                    try? await localStore.setBibleCheckedAt(.now)
-                }
-            }
-        }
         let library = LiveLibraryRepository(data: data, cache: mediaCache)
         return AppDependencies(
             authService: authService,

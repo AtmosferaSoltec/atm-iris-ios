@@ -161,7 +161,7 @@ nonisolated enum ContractSamples {
     """
 
     static let church = """
-    {"id":"\(churchID)","name":"Iglesia Vida Nueva","timezone":"America/Lima","modules":{"bible":true,"multimedia":false,"timeControl":true},
+    {"id":"\(churchID)","name":"Iglesia Vida Nueva","timezone":"America/Lima",
     "storage":{"usedBytes":0,"quotaBytes":5368709120},"createdAt":"2026-10-01T10:00:00.000Z","updatedAt":"2026-10-01T10:00:00.000Z"}
     """
 

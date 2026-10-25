@@ -41,12 +41,12 @@ nonisolated enum ProjectionFontFamily: String, CaseIterable, Identifiable, Hasha
 /// Contract §6. `fontSizePt` is measured on a 1920-wide screen; every client scales it proportionally
 /// to however big it is actually drawing (a thumbnail, the live preview, the TV).
 nonisolated struct ProjectionSettings: Equatable, Sendable {
-    static let fontSizeRange: ClosedRange<Int> = 40...200
+    static let fontSizeRange: ClosedRange<Int> = 100...250
     /// Sizes shown as quick picks; between them a stepper moves by 4.
-    static let suggestedFontSizes = [56, 64, 72, 80, 88, 96, 112, 128, 144]
+    static let suggestedFontSizes = [100, 120, 140, 160, 180, 200, 250]
 
     var fontFamily: ProjectionFontFamily = .system
-    var fontSizePt: Int = 88
+    var fontSizePt: Int = 100
     /// A gradient or an uploaded image (`ProjectionBackground.id`); `nil` shows black.
     var defaultBackgroundId: String?
 }

@@ -317,7 +317,7 @@ final class LiveConsoleViewModel {
             var plan = try await servicePlanRepository.currentService()
             if let serviceType { plan.title = serviceType.name }
             let backgrounds = try await backgroundRepository.backgrounds()
-            // A church that hasn't set one up yet just gets `ProjectionSettings()` (system/88/none).
+            // A church that hasn't set one up yet just gets `ProjectionSettings()` (system/100/none).
             let typography = (try? await projectionSettings.settings()) ?? ProjectionSettings()
             let display = await displayOutput.connectedDisplay()
             apply(plan: plan, backgrounds: backgrounds, display: display, typography: typography)

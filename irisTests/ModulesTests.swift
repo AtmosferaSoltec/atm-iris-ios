@@ -7,62 +7,12 @@ import Foundation
 import Testing
 @testable import iris
 
-/// Módulos saves each switch right away, and the console hides what is off.
+/// Iris has no modules anymore (contract §6): the console offers everything, and the Bible is out for now.
 struct ModulesTests {
-    private struct SaveFailed: Error {}
-
-    /// Loads fine but refuses every save.
-    private struct FailingModuleSettings: ModuleSettingsRepository {
-        func modules() async throws -> ChurchModules { ChurchModules() }
-        func save(_ modules: ChurchModules) async throws { throw SaveFailed() }
-    }
-
-    // MARK: Módulos screen
-
-    @Test func switchesAreSavedImmediately() async {
-        let store = InMemoryChurchStore()
-        let viewModel = ModulesViewModel(moduleSettings: MockModuleSettingsRepository(store: store, latency: .zero))
-        await viewModel.load()
-
-        viewModel.setModule(.timeControl, isOn: false)
-        #expect(viewModel.isOn(.timeControl) == false)
-        #expect(viewModel.showsTimeControlNote)
-        await viewModel.saveTask?.value
-        #expect(store.modules.timeControl == false)
-
-        viewModel.setModule(.multimedia, isOn: false)
-        viewModel.setModule(.bible, isOn: false)
-        await viewModel.saveTask?.value
-        #expect(store.modules == ChurchModules(bible: false, multimedia: false, timeControl: false))
-    }
-
-    @Test func lyricsCannotBeTurnedOff() async {
-        let viewModel = ModulesViewModel(moduleSettings: MockModuleSettingsRepository(store: InMemoryChurchStore(), latency: .zero))
-        await viewModel.load()
-
-        viewModel.setModule(.lyrics, isOn: false)
-
-        #expect(viewModel.isOn(.lyrics))
-        #expect(viewModel.saveTask == nil)
-    }
-
-    @Test func failedSaveRevertsTheSwitch() async {
-        let viewModel = ModulesViewModel(moduleSettings: FailingModuleSettings())
-        await viewModel.load()
-
-        viewModel.setModule(.bible, isOn: false)
-        await viewModel.saveTask?.value
-
-        #expect(viewModel.isOn(.bible))
-        #expect(viewModel.errorMessage != nil)
-    }
-
-    // MARK: Console
-
-    private func console(modules: ChurchModules) -> LiveConsoleViewModel {
+    private func console() -> LiveConsoleViewModel {
         let viewModel = LiveConsoleViewModel(
             session: .preview,
-            modules: modules,
+            modules: .everything,
             servicePlanRepository: MockServicePlanRepository(latency: .zero),
             projectionSettings: MockProjectionSettingsRepository(store: InMemoryChurchStore(), latency: .zero),
             backgroundRepository: MockBackgroundRepository(),
@@ -78,12 +28,8 @@ struct ModulesTests {
         return viewModel
     }
 
-    @Test func consoleWithEveryModuleOffersEverything() throws {
-        let viewModel = console(modules: ChurchModules())
-
-        #expect(viewModel.showsBible)
-        viewModel.presentBible()
-        #expect(viewModel.biblePicker != nil)
+    @Test func consoleOffersSongsAndMultimedia() throws {
+        let viewModel = console()
 
         viewModel.presentAddToService()
         #expect(viewModel.addSheet?.tabs == AddToServiceViewModel.Tab.allCases)
@@ -94,49 +40,11 @@ struct ModulesTests {
         #expect(viewModel.playback?.itemID == video.id)
     }
 
-    @Test func consoleWithoutBibleHasNoPicker() {
-        let viewModel = console(modules: ChurchModules(bible: false, multimedia: true, timeControl: true))
+    @Test func theBibleIsNotOffered() {
+        let viewModel = console()
 
         #expect(viewModel.showsBible == false)
         viewModel.presentBible()
         #expect(viewModel.biblePicker == nil)
-    }
-
-    @Test func consoleWithoutMultimediaOnlyOffersSongs() {
-        let viewModel = console(modules: ChurchModules(bible: true, multimedia: false, timeControl: true))
-
-        #expect(viewModel.showsMultimedia == false)
-        // Images and videos go; songs (and their tracks) stay.
-        #expect(viewModel.items.contains { [.image, .video].contains($0.kind) } == false)
-        #expect(viewModel.items.isEmpty == false)
-
-        viewModel.presentAddToService()
-        #expect(viewModel.addSheet?.tabs == [.songs])
-        #expect(viewModel.addSheet?.tab == .songs)
-        #expect(viewModel.addSheet?.isSongsOnly == true)
-    }
-
-    @Test func homeHandsItsModulesToTheConsoleAfterRefresh() async throws {
-        let store = InMemoryChurchStore()
-        let home = HomeViewModel(
-            session: .preview,
-            moduleSettings: MockModuleSettingsRepository(store: store, latency: .zero),
-            serviceTypes: MockServiceTypeRepository(store: store, latency: .zero),
-            people: MockPeopleRepository(store: store, latency: .zero),
-            timeRecords: MockTimeRecordRepository(store: store, latency: .zero),
-            libraryRepository: MockLibraryRepository(latency: .zero),
-            displayOutput: MockDisplayOutputService(),
-            onNavigate: { _ in }
-        )
-        await home.appear()
-
-        let modulesScreen = ModulesViewModel(moduleSettings: MockModuleSettingsRepository(store: store, latency: .zero))
-        await modulesScreen.load()
-        modulesScreen.setModule(.multimedia, isOn: false)
-        await modulesScreen.saveTask?.value
-        await home.appear()
-
-        #expect(home.modules.multimedia == false)
-        #expect(console(modules: home.modules).showsMultimedia == false)
     }
 }

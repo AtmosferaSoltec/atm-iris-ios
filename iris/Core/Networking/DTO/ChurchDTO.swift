@@ -7,12 +7,6 @@
 
 import Foundation
 
-nonisolated struct ChurchModulesDTO: Codable, Hashable, Sendable {
-    let bible: Bool
-    let multimedia: Bool
-    let timeControl: Bool
-}
-
 nonisolated struct ProjectionSettingsDTO: Codable, Hashable, Sendable {
     let fontFamily: String
     let fontSizePt: Int
@@ -31,7 +25,7 @@ nonisolated struct ChurchDTO: Codable, Hashable, Sendable {
     nonisolated struct Storage: Codable, Hashable, Sendable {
         let usedBytes: Int64
         let quotaBytes: Int64
-        /// What Música, Fondos and Multimedia take (contract §6). Optional: copies saved before it existed lack it.
+        /// What Canciones (tracks), Fondos and Multimedia take (contract §6). Optional: copies saved before it existed lack it.
         let breakdown: Breakdown?
     }
 
@@ -44,10 +38,6 @@ nonisolated struct ChurchDTO: Codable, Hashable, Sendable {
     let id: String
     let name: String
     let timezone: String
-    /// What the church sees on: its choice, minus what is switched off for all of Iris.
-    let modules: ChurchModulesDTO
-    /// Modules that exist in Iris today (contract §6). Absent from older servers: everything exists.
-    let availableModules: ChurchModulesDTO?
     /// Absent from older servers: the defaults (`ProjectionSettings()`) apply.
     let projection: ProjectionSettingsDTO?
     let storage: Storage
