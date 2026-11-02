@@ -1,8 +1,12 @@
 # atm-iris-ios
 
-**Start with `docs/plans/README.md`.** It lists the implementation phases for this repo (API connection, offline
-sync, real external display and playback), the shared platform decisions (`docs/plans/00-fundamentos/plataforma.md`)
-and the API contract (`docs/api-contract.md`). Design and behaviour: `IRIS_SPEC.md`. Working rules, architecture and
-known gotchas: `IMPLEMENTATION_PLAN.md` §1 (its phases are already done). Code in English, user-facing text in Spanish.
+iPad companion of **Iris Desktop** (`../atm-iris-desktop`): a remote control the person leading the service holds
+(next/previous slide, clear screen, timer, Bible). The computer keeps projecting; the iPad only sends commands and
+shows state over the church Wi-Fi.
 
-**Windows está descartado (2026-10-19).** El proyecto `atm-iris-win` no se toca: ni código, ni docs, ni la copia del contrato. Se trabaja solo con web, API e iPad. La consola web reemplaza a la app de Windows; su diseño se puede leer como referencia, nunca editar.
+**Status: mockup.** All earlier functionality (account, API sync, projection, playback) was removed on purpose; only
+the design system remains (`iris/DesignSystem`: tokens and components). The screens in `iris/Mockup` use sample data
+from `MockData.swift` and talk to nothing. Code in English, user-facing text in Spanish.
+
+`IRIS_SPEC.md` is the design reference (tokens §3–4, components §5). Its screens, login, modules and API sections
+describe the old product and no longer apply.

@@ -1,3 +1,1 @@
-// Release: the production API (TestFlight and App Store builds use this).
-// (`/$()/` keeps xcconfig from reading `//` as a comment.)
-IRIS_API_BASE_URL = https:/$()/iris-api.atmosferast.com/api/v1
+// Release: no external configuration yet (the app is a mockup).

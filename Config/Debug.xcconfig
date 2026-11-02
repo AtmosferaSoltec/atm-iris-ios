@@ -1,7 +1,1 @@
-// Debug: the production API, so the app is tried against real data from the simulator or an iPad.
-// (`/$()/` keeps xcconfig from reading `//` as a comment.)
-IRIS_API_BASE_URL = https:/$()/iris-api.atmosferast.com/api/v1
-
-// To work against the API running on this Mac instead, swap in one of these:
-//   simulator:    IRIS_API_BASE_URL = http:/$()/localhost:3020/api/v1
-//   physical iPad: IRIS_API_BASE_URL = http:/$()/<Mac LAN IP>:3020/api/v1
+// Debug: no external configuration yet (the app is a mockup).
