@@ -252,54 +252,59 @@ final class RemoteClient {
     /// Seconds one address gets to answer. The computer may have several interfaces and only one is on this Wi-Fi.
     private static let addressTimeout = 4.0
 
-    /// Races the QR's addresses (two rounds: the first time, iOS asks for the local network permission while the
-    /// first round waits, and the second round goes through once it is granted).
+    /// Finds which of the QR's addresses answers, then pairs over that one only (two rounds: the first time, iOS
+    /// asks for the local network permission while the first round waits, and the second goes through once it is
+    /// granted). The secret is single-use, so it is never sent down several addresses at once: the computer may
+    /// have more than one (cable, virtual adapters), all of them the same Iris.
     private static func pair(link: PairingLink) async -> Outcome {
         let greeting: [String: Any] = ["type": "pair", "protocol": RemoteProtocol.version, "code": link.secret]
-        var refusal: RemoteFailure?
         for _ in 0..<2 {
-            switch await race(urls: link.urls, greeting: greeting) {
-            case .paired(let socket, let url, let token, let name):
-                return .paired(socket, url, token: token, computerName: name)
-            case .refused(let failure):
-                refusal = failure
-            case .notFound:
-                break
+            if let url = await reach(urls: link.urls) {
+                switch await handshake(url: url, greeting: greeting) {
+                case .paired(let socket, let url, let token, let name):
+                    return .paired(socket, url, token: token, computerName: name)
+                case .refused(let failure):
+                    // The computer's answer about the secret: asking again with it cannot change that.
+                    return .refused(failure)
+                case .notFound:
+                    break
+                }
             }
-            // A refusal is the computer's answer about the secret: asking again with it cannot change that.
-            if refusal != nil { break }
             if Task.isCancelled { break }
         }
-        return refusal.map { .refused($0) } ?? .notFound
+        return .notFound
     }
 
-    private static func race(urls: [URL], greeting: [String: Any]) async -> Outcome {
-        guard !urls.isEmpty else { return .notFound }
+    /// The first address whose socket opens (nothing is said on it), or nil when none does in time.
+    private static func reach(urls: [URL]) async -> URL? {
+        guard !urls.isEmpty else { return nil }
         return await withCheckedContinuation { continuation in
             var isDone = false
             var remaining = urls.count
-            func finish(_ outcome: Outcome) {
+            var probes: [RemoteLink] = []
+            func finish(_ winner: URL?) {
                 guard !isDone else { return }
                 isDone = true
-                continuation.resume(returning: outcome)
+                probes.forEach { $0.close() }
+                continuation.resume(returning: winner)
             }
             for url in urls {
-                Task {
-                    let outcome = await handshake(url: url, greeting: greeting, timeout: addressTimeout)
-                    remaining -= 1
-                    if isDone {
-                        // Somebody else already won: close this extra socket.
-                        if case .paired(let socket, _, _, _) = outcome { socket.close() }
-                        return
-                    }
-                    switch outcome {
-                    case .paired, .refused:
-                        finish(outcome)
-                    case .notFound:
-                        if remaining == 0 { finish(.notFound) }
+                let probe = RemoteLink(url: url)
+                probes.append(probe)
+                probe.handler = { event in
+                    switch event {
+                    case .ready:
+                        finish(url)
+                    case .closed:
+                        remaining -= 1
+                        if remaining == 0 { finish(nil) }
+                    case .message:
+                        break
                     }
                 }
+                probe.start()
             }
+            DispatchQueue.main.asyncAfter(deadline: .now() + addressTimeout) { finish(nil) }
         }
     }
 
