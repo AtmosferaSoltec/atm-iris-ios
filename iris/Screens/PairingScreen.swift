@@ -3,21 +3,22 @@
 //  iris
 //
 
+import AVFoundation
 import SwiftUI
+import UIKit
 
-/// First screen, every time the app opens: type the code the computer shows. Nothing is remembered.
-/// The keypad is our own, so the iPad's system keyboard never covers the screen.
+/// First screen, every time the app opens: scan the QR that Iris shows on the computer. Nothing is typed.
 struct PairingScreen: View {
     let client: RemoteClient
 
-    private static let length = RemoteProtocol.codeLength
-    @State private var code = ""
-    @State private var isAskingAddress = false
-    @State private var address = ""
-    /// Said on this screen only: the address was typed before the code was complete.
-    @State private var hint: String?
+    private enum Camera { case checking, allowed, denied, unavailable }
+
+    @State private var camera: Camera = .checking
     /// The error on screen right now; it goes away after a few seconds or with a tap.
     @State private var notice: String?
+    /// The same QR is read many times a second: a rejected one is said once, not every frame.
+    @State private var lastRejected: (text: String, date: Date)?
+    @Environment(\.openURL) private var openURL
 
     private var isConnecting: Bool { client.phase == .connecting }
 
@@ -30,43 +31,29 @@ struct PairingScreen: View {
                     VStack(spacing: IrisSpacing.xs) {
                         Text("Conecta con Iris")
                             .font(IrisFont.title)
-                        Text("En la computadora, abre Configuración → «Vincular iPad» y escribe el código que aparece.")
+                        Text("Escanea el código QR que aparece en Iris en tu computadora.")
                             .font(IrisFont.callout)
                             .foregroundStyle(IrisColor.textSecondary)
                             .multilineTextAlignment(.center)
                     }
 
-                    codeDisplay
-                    keypad
-
-                    Button(action: connect) {
-                        if isConnecting {
-                            HStack(spacing: IrisSpacing.xs) {
-                                ProgressView().tint(IrisColor.textInverse)
-                                Text("Buscando Iris…")
-                            }
-                        } else {
-                            Text("Conectar")
-                        }
-                    }
-                    .buttonStyle(.irisPrimary)
-                    .disabled(code.count < Self.length || isConnecting)
+                    viewfinder
+                        .frame(height: 300)
+                        .clipShape(RoundedRectangle(cornerRadius: IrisRadius.md, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: IrisRadius.md, style: .continuous)
+                                .strokeBorder(IrisColor.stroke, lineWidth: 1)
+                        )
                 }
             }
             .frame(width: IrisSize.authPanelWidth)
 
-            VStack(spacing: IrisSpacing.xxs) {
-                Text("La computadora y el iPad deben estar en la misma red Wi-Fi.")
-                    .font(IrisFont.caption)
-                    .foregroundStyle(IrisColor.textSecondary)
-                Button("¿No la encuentra? Escribe la dirección") { isAskingAddress = true }
-                    .font(IrisFont.caption)
-                    .foregroundStyle(IrisColor.textSecondary)
-                    .underline()
-            }
+            Text("La computadora y el iPad deben estar en la misma red Wi-Fi.")
+                .font(IrisFont.caption)
+                .foregroundStyle(IrisColor.textSecondary)
         }
         .padding(IrisSpacing.lg)
-        // Floating, so a long message never pushes "Escribe la dirección" off the screen; it leaves by itself.
+        // Floating, so a long message never pushes the viewfinder around; it leaves by itself.
         .overlay(alignment: .top) {
             if let notice {
                 IrisBanner(style: .error, message: notice)
@@ -84,87 +71,92 @@ struct PairingScreen: View {
             try? await Task.sleep(for: .seconds(6))
             withAnimation(IrisMotion.snappy) { notice = nil }
         }
-        .onChange(of: hint) { _, message in if let message { notice = message } }
-        .alert("Dirección de la computadora", isPresented: $isAskingAddress) {
-            TextField("192.168.1.20", text: $address)
-                .keyboardType(.numbersAndPunctuation)
-                .textInputAutocapitalization(.never)
-            Button("Cancelar", role: .cancel) {}
-            Button("Conectar") { connect(to: address) }
-        } message: {
-            Text("La dirección aparece en Configuración → Control desde iPad, en Iris.")
-        }
-        // A refused code starts over; not finding the computer keeps the digits for the next try.
         .onChange(of: client.failureMessage) { _, message in
             if let message { notice = message }
-            if message != nil && client.isCodeRejected { code = "" }
         }
+        .task { await checkCamera() }
+        .onAppear { if let message = client.failureMessage { notice = message } }
     }
 
-    private func connect() { connect(to: nil) }
+    // MARK: Viewfinder
 
-    private func connect(to address: String?) {
-        guard code.count == Self.length else {
-            hint = "Escribe primero el código de 6 dígitos y vuelve a tocar «Conectar»."
-            return
-        }
-        hint = nil
-        client.connect(code: code, address: address?.isEmpty == true ? nil : address)
-    }
-
-    private var codeDisplay: some View {
-        HStack(spacing: IrisSpacing.xs) {
-            ForEach(0..<Self.length, id: \.self) { index in
-                let digit = index < code.count ? String(Array(code)[index]) : ""
-                Text(digit)
-                    .font(IrisFont.code)
-                    .frame(width: 54, height: 64)
-                    .background(IrisColor.surface, in: RoundedRectangle(cornerRadius: IrisRadius.sm))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: IrisRadius.sm)
-                            .strokeBorder(index == code.count ? IrisColor.coral : IrisColor.stroke, lineWidth: index == code.count ? 2 : 1)
-                    )
-            }
-        }
-    }
-
-    private var keypad: some View {
-        let keys: [[String]] = [["1", "2", "3"], ["4", "5", "6"], ["7", "8", "9"], ["", "0", "⌫"]]
-        return VStack(spacing: IrisSpacing.xs) {
-            ForEach(keys, id: \.self) { row in
-                HStack(spacing: IrisSpacing.xs) {
-                    ForEach(row, id: \.self) { key in
-                        keyButton(key)
+    @ViewBuilder
+    private var viewfinder: some View {
+        switch camera {
+        case .checking:
+            Color.black.overlay(ProgressView())
+        case .allowed:
+            ZStack {
+                QRScannerView(onCode: handle, onUnavailable: { camera = .unavailable })
+                if isConnecting {
+                    Color.black.opacity(0.65)
+                    HStack(spacing: IrisSpacing.xs) {
+                        ProgressView()
+                        Text("Conectando con Iris…").font(IrisFont.calloutEmphasized)
                     }
                 }
             }
+        case .denied:
+            message(
+                icon: "camera.fill",
+                text: "Iris necesita la cámara para escanear el código QR. Actívala en Ajustes del iPad → Iris → Cámara.",
+                action: ("Abrir Ajustes", openSettings)
+            )
+        case .unavailable:
+            message(icon: "camera.fill", text: "No pudimos usar la cámara de este iPad.", action: nil)
         }
     }
 
-    @ViewBuilder
-    private func keyButton(_ key: String) -> some View {
-        if key.isEmpty {
-            Color.clear.frame(maxWidth: .infinity, minHeight: 56)
-        } else {
-            Button {
-                guard !isConnecting else { return }
-                hint = nil
-                if key == "⌫" {
-                    if !code.isEmpty { code.removeLast() }
-                } else if code.count < Self.length {
-                    code.append(key)
-                }
-            } label: {
-                Group {
-                    if key == "⌫" { Image(systemName: "delete.left") } else { Text(key) }
-                }
-                .font(.system(size: 26, weight: .medium, design: .rounded))
-                .frame(maxWidth: .infinity, minHeight: 56)
-                .background(IrisColor.surface, in: RoundedRectangle(cornerRadius: IrisRadius.md))
+    private func message(icon: String, text: String, action: (title: String, run: () -> Void)?) -> some View {
+        VStack(spacing: IrisSpacing.md) {
+            Image(systemName: icon)
+                .font(.system(size: 32))
+                .foregroundStyle(IrisColor.textSecondary)
+            Text(text)
+                .font(IrisFont.callout)
+                .foregroundStyle(IrisColor.textSecondary)
+                .multilineTextAlignment(.center)
+            if let action {
+                Button(action.title, action: action.run).buttonStyle(.irisPrimary)
             }
-            .buttonStyle(.irisPressable)
-            .accessibilityLabel(key == "⌫" ? "Borrar" : key)
         }
+        .padding(IrisSpacing.lg)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(IrisColor.surface)
+    }
+
+    // MARK: Logic
+
+    private func checkCamera() async {
+        switch AVCaptureDevice.authorizationStatus(for: .video) {
+        case .authorized:
+            camera = .allowed
+        case .notDetermined:
+            camera = await AVCaptureDevice.requestAccess(for: .video) ? .allowed : .denied
+        default:
+            camera = .denied
+        }
+        // Back from Settings with the permission granted.
+        while camera == .denied {
+            try? await Task.sleep(for: .seconds(1))
+            if AVCaptureDevice.authorizationStatus(for: .video) == .authorized { camera = .allowed }
+        }
+    }
+
+    private func handle(_ text: String) {
+        guard !isConnecting else { return }
+        switch PairingLink.parse(text) {
+        case .success(let link):
+            client.connect(link: link)
+        case .failure(let failure):
+            if let last = lastRejected, last.text == text, Date().timeIntervalSince(last.date) < 4 { return }
+            lastRejected = (text, Date())
+            notice = failure.message
+        }
+    }
+
+    private func openSettings() {
+        if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
     }
 }
 

@@ -4,20 +4,19 @@
 //
 
 import Foundation
-import Network
 import Observation
 import UIKit
 
-/// The iPad's whole connection to Iris on the computer: finds it, pairs with the code, keeps the latest state and
+/// The iPad's whole connection to Iris on the computer: pairs using the QR's link, keeps the latest state and
 /// sends commands. Nothing is written to disk: the session token lives here, in memory, and dies with the app.
 @Observable
 final class RemoteClient {
     enum Phase: Equatable {
         case disconnected
-        /// Looking for the computer and trying the code.
+        /// Trying the addresses from the QR.
         case connecting
         case connected
-        /// The link dropped while the app stays open: trying again with the token, without asking for the code.
+        /// The link dropped while the app stays open: trying again with the token, without scanning again.
         case reconnecting
     }
 
@@ -30,9 +29,6 @@ final class RemoteClient {
     private(set) var computerName: String?
     /// Why the last attempt failed, in Spanish, for the pairing screen.
     private(set) var failureMessage: String?
-    /// The computer answered and refused the code: the digits typed are wrong, so the screen clears them.
-    /// (Not finding the computer says nothing about the code, which stays for the next try.)
-    private(set) var isCodeRejected = false
 
     private var token: String?
     private var url: URL?
@@ -58,29 +54,25 @@ final class RemoteClient {
 
     // MARK: Pairing
 
-    /// Looks for Iris on the network (or goes straight to `address`, "192.168.1.20" or "192.168.1.20:47831") and
-    /// tries `code` on every computer it finds.
-    func connect(code: String, address: String? = nil) {
+    /// Tries every address in the QR at once; the first that completes the handshake and accepts the secret wins.
+    func connect(link: PairingLink) {
         guard phase != .connecting else { return }
         attempt?.cancel()
         phase = .connecting
         failureMessage = nil
-        isCodeRejected = false
         attempt = Task { [weak self] in
-            let outcome = await Self.pair(code: code, address: address)
-            guard let self, !Task.isCancelled else { return }
+            let outcome = await Self.pair(link: link)
+            guard let self, !Task.isCancelled else {
+                if case .paired(let link, _, _, _) = outcome { link.close() }
+                return
+            }
             switch outcome {
-            case .paired(let link, let url, let token, let name):
-                self.adopt(link: link, url: url, token: token, computerName: name)
+            case .paired(let socket, let url, let token, let name):
+                self.adopt(link: socket, url: url, token: token, computerName: link.computerName ?? name)
             case .refused(let failure):
-                self.isCodeRejected = true
                 self.fail(failure.message)
-            case .localNetworkDenied:
-                self.fail("Iris no tiene permiso para usar la red local. Actívalo en Ajustes del iPad → Iris → Red local.")
             case .notFound:
-                self.fail(address == nil
-                    ? "No encontramos Iris. Revisa que la computadora y el iPad estén en la misma red Wi-Fi y que el control desde iPad esté encendido. En Windows, el firewall debe permitir Iris."
-                    : "No pudimos conectar con esa dirección. Revisa que sea la de la computadora (aparece en Configuración → Control desde iPad) y que el firewall de Windows permita Iris.")
+                self.fail("No pudimos conectar. Revisa que el iPad y la computadora estén en la misma red Wi‑Fi.")
             }
         }
     }
@@ -233,9 +225,9 @@ final class RemoteClient {
                     return
                 case .refused:
                     self.disconnect()
-                    self.failureMessage = "Se perdió la conexión. Escribe el código otra vez."
+                    self.failureMessage = "Se perdió la conexión. Escanea el código QR otra vez."
                     return
-                case .notFound, .localNetworkDenied:
+                case .notFound:
                     try? await Task.sleep(for: .seconds(2))
                 }
             }
@@ -254,69 +246,65 @@ final class RemoteClient {
     private enum Outcome {
         case paired(RemoteLink, URL, token: String, computerName: String)
         case refused(RemoteFailure)
-        case localNetworkDenied
         case notFound
     }
 
-    /// Tries the code on every computer announcing Iris (or the typed address), all at once. The first that accepts
-    /// wins; a refusal waits a few seconds in case another computer is the right one.
-    private static func pair(code: String, address: String?) async -> Outcome {
-        let greeting: [String: Any] = ["type": "pair", "protocol": RemoteProtocol.version, "code": code]
-        if let address, let url = url(forAddress: address) {
-            return await handshake(url: url, greeting: greeting)
-        }
-        return await withCheckedContinuation { continuation in
-            let browser = NWBrowser(for: .bonjour(type: RemoteProtocol.serviceType, domain: nil), using: .tcp)
-            var isDone = false
-            var refusal: RemoteFailure?
-            var isDenied = false
+    /// Seconds one address gets to answer. The computer may have several interfaces and only one is on this Wi-Fi.
+    private static let addressTimeout = 4.0
 
+    /// Races the QR's addresses (two rounds: the first time, iOS asks for the local network permission while the
+    /// first round waits, and the second round goes through once it is granted).
+    private static func pair(link: PairingLink) async -> Outcome {
+        let greeting: [String: Any] = ["type": "pair", "protocol": RemoteProtocol.version, "code": link.secret]
+        var refusal: RemoteFailure?
+        for _ in 0..<2 {
+            switch await race(urls: link.urls, greeting: greeting) {
+            case .paired(let socket, let url, let token, let name):
+                return .paired(socket, url, token: token, computerName: name)
+            case .refused(let failure):
+                refusal = failure
+            case .notFound:
+                break
+            }
+            // A refusal is the computer's answer about the secret: asking again with it cannot change that.
+            if refusal != nil { break }
+            if Task.isCancelled { break }
+        }
+        return refusal.map { .refused($0) } ?? .notFound
+    }
+
+    private static func race(urls: [URL], greeting: [String: Any]) async -> Outcome {
+        guard !urls.isEmpty else { return .notFound }
+        return await withCheckedContinuation { continuation in
+            var isDone = false
+            var remaining = urls.count
             func finish(_ outcome: Outcome) {
                 guard !isDone else { return }
                 isDone = true
-                browser.cancel()
                 continuation.resume(returning: outcome)
             }
-            func finishWithWhatWeKnow() {
-                if let refusal { finish(.refused(refusal)) }
-                else { finish(isDenied ? .localNetworkDenied : .notFound) }
-            }
-
-            browser.stateUpdateHandler = { state in
-                // The person said no to "red local" (or never saw the question): nothing will ever be found.
-                if case .waiting(let error) = state, isPolicyDenied(error) { isDenied = true }
-                if case .failed(let error) = state, isPolicyDenied(error) { isDenied = true; finishWithWhatWeKnow() }
-            }
-            browser.browseResultsChangedHandler = { _, changes in
-                for case .added(let result) in changes where !isDone {
-                    Task {
-                        var outcome = Outcome.notFound
-                        if let url = await resolve(result.endpoint) {
-                            outcome = await handshake(url: url, greeting: greeting)
-                        }
-                        if isDone {
-                            if case .paired(let link, _, _, _) = outcome { link.close() }
-                            return
-                        }
-                        switch outcome {
-                        case .paired:
-                            finish(outcome)
-                        case .refused(let failure):
-                            refusal = failure
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 4) { finishWithWhatWeKnow() }
-                        default:
-                            break
-                        }
+            for url in urls {
+                Task {
+                    let outcome = await handshake(url: url, greeting: greeting, timeout: addressTimeout)
+                    remaining -= 1
+                    if isDone {
+                        // Somebody else already won: close this extra socket.
+                        if case .paired(let socket, _, _, _) = outcome { socket.close() }
+                        return
+                    }
+                    switch outcome {
+                    case .paired, .refused:
+                        finish(outcome)
+                    case .notFound:
+                        if remaining == 0 { finish(.notFound) }
                     }
                 }
             }
-            browser.start(queue: .main)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 25) { finishWithWhatWeKnow() }
         }
     }
 
-    /// Opens a socket, says hello, and waits for the answer (twenty seconds at most: the first time, iOS asks for the local network permission meanwhile).
-    private static func handshake(url: URL, greeting: [String: Any]) async -> Outcome {
+    /// Opens a socket, says hello, and waits for the answer (`timeout` seconds at most).
+    private static func handshake(url: URL, greeting: [String: Any], timeout: Double = 8) async -> Outcome {
         await withCheckedContinuation { continuation in
             let link = RemoteLink(url: url)
             var isDone = false
@@ -346,55 +334,7 @@ final class RemoteClient {
                 }
             }
             link.start()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 20) { finish(.notFound) }
-        }
-    }
-
-    private static func isPolicyDenied(_ error: NWError) -> Bool {
-        if case .dns(let code) = error { return code == -65570 } // kDNSServiceErr_PolicyDenied
-        return false
-    }
-
-    private static func url(forAddress address: String) -> URL? {
-        let parts = address.trimmingCharacters(in: .whitespaces).split(separator: ":", maxSplits: 1)
-        guard let host = parts.first, !host.isEmpty else { return nil }
-        let port = parts.count > 1 ? UInt16(parts[1]) : RemoteProtocol.defaultPort
-        guard let port else { return nil }
-        return URL(string: "ws://\(host):\(port)/remote")
-    }
-
-    /// A Bonjour service has a name, not an address: connect once to learn the IPv4 address behind it.
-    private static func resolve(_ endpoint: NWEndpoint) async -> URL? {
-        await withCheckedContinuation { continuation in
-            let parameters = NWParameters.tcp
-            (parameters.defaultProtocolStack.internetProtocol as? NWProtocolIP.Options)?.version = .v4
-            let probe = NWConnection(to: endpoint, using: parameters)
-            var isDone = false
-            func finish(_ url: URL?) {
-                guard !isDone else { return }
-                isDone = true
-                probe.cancel()
-                continuation.resume(returning: url)
-            }
-            probe.stateUpdateHandler = { state in
-                switch state {
-                case .ready:
-                    if case .hostPort(let host, let port)? = probe.currentPath?.remoteEndpoint,
-                       case .ipv4(let address) = host {
-                        // The interface suffix ("%en0") only belongs to link-local addresses.
-                        let text = "\(address)".split(separator: "%").first.map(String.init) ?? "\(address)"
-                        finish(URL(string: "ws://\(text):\(port.rawValue)/remote"))
-                    } else {
-                        finish(nil)
-                    }
-                case .failed, .cancelled:
-                    finish(nil)
-                default:
-                    break
-                }
-            }
-            probe.start(queue: .main)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 8) { finish(nil) }
+            DispatchQueue.main.asyncAfter(deadline: .now() + timeout) { finish(.notFound) }
         }
     }
 }

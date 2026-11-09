@@ -27,10 +27,9 @@ Repositorios (todos bajo `/Users/jmaldonado/Documents/Atmosfera/`):
 - El iPad **no guarda ni gestiona** canciones, letras, archivos ni base de datos. Todo lo usa de la computadora.
 - **No se agregan canciones ni elementos al servicio desde el iPad.** Eso se hace en la computadora. El iPad solo
   muestra el servicio, permite elegir un elemento y moverse por él.
-- **Sin sesión guardada.** Cada vez que se abre la app, el iPad pide el **código de 6 dígitos** que muestra la app de
-  escritorio (Configuración → «Vincular iPad»). No hay Keychain, ni "recordar", ni lista de iPads vinculados ni
-  revocación. El código se escribe en un **teclado numérico propio de la app** (no el teclado del sistema).
-  Sin búsqueda constante de equipos ni listas.
+- **Sin sesión guardada.** Cada vez que se abre la app, el iPad pide **escanear el código QR** que muestra la app de
+  escritorio. No hay Keychain, ni "recordar", ni lista de iPads vinculados ni revocación. No se escribe nada
+  (ni código ni IP) y no hay búsqueda de equipos (sin Bonjour).
 - Solo funciona dentro de la **misma red Wi-Fi**.
 - No hay Android (no se ve necesario).
 - Puede haber varios iPads vinculados a la misma computadora (idea, no decidida: permisos por iPad).
@@ -39,7 +38,7 @@ Repositorios (todos bajo `/Users/jmaldonado/Documents/Atmosfera/`):
 
 La maqueta en `iris/Mockup/` ya define el diseño; los datos son de ejemplo (`MockData.swift`). Lo decidido:
 
-1. **Conectar** (`PairingScreen`), siempre al abrir: 6 casillas, teclado numérico propio y «Conectar».
+1. **Conectar** (`PairingScreen`), siempre al abrir: visor de la cámara para escanear el QR de Iris.
 2. **Control en vivo** (`RemoteScreen`), una sola pantalla en horizontal:
    - **Barra de tiempos arriba** (`TimerBar`), igual en espíritu a la de la computadora: bloque actual y responsable,
      reloj `transcurrido / previsto` y lo que queda, bloques (hecho / actual / pendientes) y el botón
@@ -55,7 +54,7 @@ La maqueta en `iris/Mockup/` ya define el diseño; los datos son de ejemplo (`Mo
    - **Herramientas** (`ToolsSheet`): **Cronómetro/temporizador** en pantalla y **Sonidos**. El **texto** (tipografía)
      NO va en el iPad; se maneja en la computadora.
    - **Biblia** (`BibleSheet`): libro, capítulo y versículos como cuadros; «Enviar a la pantalla».
-3. Desvincular desde la cabecera.
+3. Desvincular desde la cabecera (vuelve al lector de QR).
 
 Preguntas de diseño abiertas: si el temporizador de la computadora es de cuenta regresiva o de otro tipo (igualar al
 de escritorio); si el fondo debe poder fijarse también para todo el servicio; permisos por iPad.
@@ -169,3 +168,14 @@ Hoy **no existe nada** de esto en el escritorio. Hechos de su arquitectura que i
 
 - Probar en un iPad físico y en Windows (firewall): el permiso de «red local» de iOS aparece la primera vez.
 - Si el protocolo cambia: subir `PROTOCOL_VERSION` en ambos lados.
+
+
+## 9. Vinculación por QR (reemplaza código, IP manual y Bonjour)
+
+El iPad solo se conecta escaneando el QR de Iris Desktop: una URL `iris://pair?v=1&c=<secreto>&p=<puerto>&n=<nombre>&h=<ipv4>&h=<ipv4>...`.
+`PairingLink` la interpreta (pruebas en `irisTests/PairingLinkTests.swift`). `v` debe ser 1; `c` viaja sin cambios en el
+campo `code` del mensaje `pair`; el protocolo de red sigue en la versión 1. `RemoteClient.connect(link:)` prueba todas las
+`h` en paralelo (4 s cada una, dos rondas por el permiso de red local) y se queda con la primera que responde; esa URL es la
+que usa la reconexión con token. Si la reanudación falla, vuelve al lector. Se eliminaron el teclado de código, la IP manual,
+`NWBrowser` y `NSBonjourServices`. Añadido `NSCameraUsageDescription`. Depuración (`DEBUG`): `-link '<url iris://pair...>'`
+sustituye a `-pair`. La cámara no funciona en el simulador: probar el escaneo en un iPad físico.

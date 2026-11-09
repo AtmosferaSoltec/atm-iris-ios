@@ -143,18 +143,18 @@ struct RemoteScreen: View {
             headerButton("Herramientas", "wrench.and.screwdriver") { sheet = .tools }
             // Not an "×": it reads as "close this" and dropped the connection mid-service. It asks first.
             Button { isConfirmingDisconnect = true } label: {
-                Label("Desconectar", systemImage: "wifi.slash")
+                Label("Desvincular", systemImage: "qrcode.viewfinder")
                     .foregroundStyle(IrisColor.danger)
                     .padding(.horizontal, IrisSpacing.md)
             }
             .buttonStyle(.irisGlass)
             .overlay(Capsule().strokeBorder(IrisColor.danger.opacity(0.5), lineWidth: 1))
             .fixedSize()
-            .confirmationDialog("¿Desconectar el iPad?", isPresented: $isConfirmingDisconnect, titleVisibility: .visible) {
-                Button("Desconectar", role: .destructive) { client.disconnect() }
+            .confirmationDialog("¿Desvincular el iPad?", isPresented: $isConfirmingDisconnect, titleVisibility: .visible) {
+                Button("Desvincular", role: .destructive) { client.disconnect() }
                 Button("Seguir conectado", role: .cancel) {}
             } message: {
-                Text("Para volver a conectar necesitarás el código que aparece en la computadora.")
+                Text("Para volver a conectar tendrás que escanear otra vez el código QR de Iris en la computadora.")
             }
         }
     }

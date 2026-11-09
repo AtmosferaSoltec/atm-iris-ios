@@ -10,9 +10,6 @@ import SwiftUI
 /// change one, change the other, and bump `version` when they stop understanding each other.
 enum RemoteProtocol {
     static let version = 1
-    static let serviceType = "_iris._tcp"
-    static let codeLength = 6
-    static let defaultPort: UInt16 = 47_831
 }
 
 // MARK: State (what the computer tells us)

@@ -5,7 +5,7 @@
 
 import SwiftUI
 
-/// Pairing first, every time; the remote once Iris on the computer has accepted the code.
+/// Scanner first, every time; the remote once Iris on the computer has accepted the QR's secret.
 struct AppRoot: View {
     /// `-demo` shows the remote with sample content and no computer (screenshots, previews).
     @State private var client: RemoteClient = ProcessInfo.processInfo.arguments.contains("-demo")
@@ -36,15 +36,15 @@ struct AppRoot: View {
 
     #if DEBUG
     /// Launch arguments to exercise the real connection without touching the screen (simulator, CI):
-    /// `-pair 123456` types the code, `-show 1` then projects that slide of the first item.
+    /// `-link 'iris://pair?v=1&c=...&p=...&h=...'` pairs without the camera, `-show 1` then projects that slide of the first item.
     private func runDebugScript() async {
         let arguments = ProcessInfo.processInfo.arguments
         func value(of flag: String) -> String? {
             guard let index = arguments.firstIndex(of: flag), index + 1 < arguments.count else { return nil }
             return arguments[index + 1]
         }
-        guard let code = value(of: "-pair") else { return }
-        client.connect(code: code, address: value(of: "-address"))
+        guard let text = value(of: "-link"), case .success(let link) = PairingLink.parse(text) else { return }
+        client.connect(link: link)
         if arguments.contains("-exercise") {
             // Every new command once, in the order an operator would use them.
             for _ in 0..<100 where client.state == nil { try? await Task.sleep(for: .milliseconds(100)) }
