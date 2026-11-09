@@ -7,13 +7,16 @@ import AVFoundation
 import SwiftUI
 import UIKit
 
-/// First screen, every time the app opens: scan the QR that Iris shows on the computer. Nothing is typed.
+/// First screen, every time the app opens: scan the QR that Iris shows on the computer. Nothing is typed, and the
+/// camera stays off until "Escanear" is pressed.
 struct PairingScreen: View {
     let client: RemoteClient
 
     private enum Camera { case checking, allowed, denied, unavailable }
 
     @State private var camera: Camera = .checking
+    /// The camera is only on while this is true: pressed "Escanear", and nothing connected or connecting yet.
+    @State private var isScanning = false
     /// The error on screen right now; it goes away after a few seconds or with a tap.
     @State private var notice: String?
     /// The same QR is read many times a second: a rejected one is said once, not every frame.
@@ -37,13 +40,27 @@ struct PairingScreen: View {
                             .multilineTextAlignment(.center)
                     }
 
-                    viewfinder
-                        .frame(height: 300)
-                        .clipShape(RoundedRectangle(cornerRadius: IrisRadius.md, style: .continuous))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: IrisRadius.md, style: .continuous)
-                                .strokeBorder(IrisColor.stroke, lineWidth: 1)
-                        )
+                    if isScanning {
+                        viewfinder
+                            .frame(height: 300)
+                            .clipShape(RoundedRectangle(cornerRadius: IrisRadius.md, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: IrisRadius.md, style: .continuous)
+                                    .strokeBorder(IrisColor.stroke, lineWidth: 1)
+                            )
+                        if !isConnecting {
+                            Button("Cancelar") { isScanning = false }
+                                .buttonStyle(.irisLink)
+                        }
+                    } else {
+                        Button {
+                            notice = nil
+                            isScanning = true
+                        } label: {
+                            Label("Escanear código QR", systemImage: "qrcode.viewfinder")
+                        }
+                        .buttonStyle(.irisPrimary)
+                    }
                 }
             }
             .frame(width: IrisSize.authPanelWidth)
@@ -74,7 +91,13 @@ struct PairingScreen: View {
         .onChange(of: client.failureMessage) { _, message in
             if let message { notice = message }
         }
-        .task { await checkCamera() }
+        .task(id: isScanning) {
+            if isScanning { await checkCamera() }
+        }
+        // A pairing that did not work goes back to the button: the camera does not start again by itself.
+        .onChange(of: client.phase) { old, new in
+            if new == .disconnected, old == .connecting { isScanning = false }
+        }
         .onAppear { if let message = client.failureMessage { notice = message } }
     }
 
@@ -87,7 +110,11 @@ struct PairingScreen: View {
             Color.black.overlay(ProgressView())
         case .allowed:
             ZStack {
-                QRScannerView(onCode: handle, onUnavailable: { camera = .unavailable })
+                QRScannerView(
+                    isActive: isScanning && client.phase == .disconnected,
+                    onCode: handle,
+                    onUnavailable: { camera = .unavailable }
+                )
                 if isConnecting {
                     Color.black.opacity(0.65)
                     HStack(spacing: IrisSpacing.xs) {
@@ -144,7 +171,7 @@ struct PairingScreen: View {
     }
 
     private func handle(_ text: String) {
-        guard !isConnecting else { return }
+        guard client.phase == .disconnected else { return }
         switch PairingLink.parse(text) {
         case .success(let link):
             client.connect(link: link)

@@ -10,6 +10,8 @@ import UIKit
 /// Camera viewfinder that reports every QR code it reads (the same code can arrive many times a second:
 /// the caller decides what to ignore).
 struct QRScannerView: UIViewControllerRepresentable {
+    /// Scanning only while there is nothing paired or being paired: the camera stops the moment a connection starts.
+    let isActive: Bool
     let onCode: (String) -> Void
     /// The session could not start (no camera, camera in use).
     let onUnavailable: () -> Void
@@ -18,12 +20,18 @@ struct QRScannerView: UIViewControllerRepresentable {
         let controller = QRScannerController()
         controller.onCode = onCode
         controller.onUnavailable = onUnavailable
+        controller.setActive(isActive)
         return controller
+    }
+
+    static func dismantleUIViewController(_ controller: QRScannerController, coordinator: ()) {
+        controller.setActive(false)
     }
 
     func updateUIViewController(_ controller: QRScannerController, context: Context) {
         controller.onCode = onCode
         controller.onUnavailable = onUnavailable
+        controller.setActive(isActive)
     }
 }
 
@@ -63,12 +71,24 @@ final class QRScannerController: UIViewController, AVCaptureMetadataOutputObject
         }
     }
 
+    private var isActive = true
+
+    func setActive(_ active: Bool) {
+        isActive = active
+        guard isViewLoaded else { return }
+        sessionQueue.async { [weak self] in
+            guard let self, self.isConfigured else { return }
+            if active, !self.session.isRunning { self.session.startRunning() }
+            if !active, self.session.isRunning { self.session.stopRunning() }
+        }
+    }
+
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         sessionQueue.async { [weak self] in
             guard let self else { return }
             if !self.isConfigured { self.configure() }
-            if self.isConfigured, !self.session.isRunning { self.session.startRunning() }
+            if self.isConfigured, self.isActive, !self.session.isRunning { self.session.startRunning() }
         }
     }
 
@@ -107,6 +127,7 @@ final class QRScannerController: UIViewController, AVCaptureMetadataOutputObject
         didOutput objects: [AVMetadataObject],
         from connection: AVCaptureConnection
     ) {
+        guard isActive else { return }
         for case let code as AVMetadataMachineReadableCodeObject in objects {
             if let text = code.stringValue { onCode?(text) }
         }

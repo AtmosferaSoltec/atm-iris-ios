@@ -55,13 +55,21 @@ final class RemoteClient {
     // MARK: Pairing
 
     /// Tries every address in the QR at once; the first that completes the handshake and accepts the secret wins.
+    /// Secrets already sent to a computer: each works once, so a code that was used (or refused) is never sent
+    /// again, however many times the camera still sees it on the screen.
+    private var spentSecrets: Set<String> = []
+
     func connect(link: PairingLink) {
-        guard phase != .connecting else { return }
+        // Only from the scanner: a scan that arrives while connected (or connecting) is the camera still seeing
+        // the QR it just used, not a new pairing.
+        guard phase == .disconnected, !spentSecrets.contains(link.secret) else { return }
         attempt?.cancel()
         phase = .connecting
         failureMessage = nil
         attempt = Task { [weak self] in
             let outcome = await Self.pair(link: link)
+            // Whatever the computer answered used the secret up; only "nobody answered" leaves it fresh.
+            if case .notFound = outcome {} else { self?.spentSecrets.insert(link.secret) }
             guard let self, !Task.isCancelled else {
                 if case .paired(let link, _, _, _) = outcome { link.close() }
                 return
@@ -237,6 +245,12 @@ final class RemoteClient {
     }
 
     private func fail(_ message: String) {
+        // A refused pairing must not leave an earlier session half-open: the computer would count a device
+        // the iPad no longer shows.
+        link?.close()
+        link = nil
+        token = nil
+        url = nil
         phase = .disconnected
         failureMessage = message
     }
